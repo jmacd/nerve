@@ -3,9 +3,18 @@ package main
 import (
 	"fmt"
 	"net"
+	"time"
 
-	"github.com/jmacd/go-artnet/packet"
+	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
+)
+
+const (
+	ipAddr = "192.168.0.22"
+
+	pixels = 300 // Lies (it's 299)
+	width  = 20
+	height = 15
 )
 
 var keypoints = GradientTable{
@@ -22,45 +31,82 @@ var keypoints = GradientTable{
 	{MustParseHex("#5e4fa2"), 1.0},
 }
 
-func main() {
+type Buffer [pixels]colorful.Color
 
-	dst := fmt.Sprintf("%s:%d", "192.168.0.14", packet.ArtNetPort)
+type Sender struct {
+	dest *net.UDPAddr
+	conn *net.UDPConn
+
+	Buffer
+	packet.ArtDMXPacket
+}
+
+func newSender() *Sender {
+	dst := fmt.Sprintf("%s:%d", ipAddr, packet.ArtNetPort)
 	node, _ := net.ResolveUDPAddr("udp", dst)
+
 	src := fmt.Sprintf("%s:%d", "", packet.ArtNetPort)
 	localAddr, _ := net.ResolveUDPAddr("udp", src)
 
 	conn, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
-		fmt.Printf("error opening udp: %s\n", err)
-		return
+		panic(fmt.Sprint("error opening udp: ", err))
 	}
 
-	// set channels 1 and 4 to FL, 2, 3 and 5 to FD
-	// on my colorBeam this sets output 1 to fullbright red with zero strobing
-
-	p := &packet.ArtDMXPacket{
-		Sequence: 0,
-		SubUni:   0,
-		Net:      0,
+	return &Sender{
+		dest: node,
+		conn: conn,
 	}
+}
 
-	for i := 0; i < 170; i++ {
-		c := keypoints.GetInterpolatedColorFor(float64(i) / float64(170))
+func main() {
+	sender := newSender()
+	buffer := sender.Buffer[:]
 
-		p.Data[i*3+0] = byte(c.B * 255)
-		p.Data[i*3+1] = byte(c.G * 255)
-		p.Data[i*3+2] = byte(c.R * 255)
+	for {
+		for i := 0; i < 100; i++ {
+			c := keypoints.GetInterpolatedColorFor(float64(i) / float64(100))
+
+			for i := 0; i < pixels; i++ {
+				buffer[i] = c
+			}
+
+			sender.send()
+			time.Sleep(time.Millisecond * 160)
+		}
 	}
+}
 
-	// fmt.Println("LOOK", p.Data)
-	b, err := p.MarshalBinary()
+func (s *Sender) send() {
+	data := s.ArtDMXPacket.Data[:]
+	s.ArtDMXPacket.SubUni = 0
 
-	n, err := conn.WriteTo(b, node)
-	if err != nil {
-		fmt.Printf("error writing packet: %s\n", err)
-		return
+	for p := 0; p < pixels; {
+
+		num := 170
+		if pixels-p < num {
+			num = pixels - p
+		}
+
+		for i := 0; i < num; i++ {
+			c := s.Buffer[p+i]
+			data[i*3+0] = byte(c.B * 255)
+			data[i*3+1] = byte(c.G * 255)
+			data[i*3+2] = byte(c.R * 255)
+		}
+
+		s.ArtDMXPacket.SubUni++
+
+		b, _ := s.ArtDMXPacket.MarshalBinary()
+
+		_, err := s.conn.WriteTo(b, s.dest)
+		if err != nil {
+			panic(fmt.Sprint("error writing packet: ", err))
+		}
+
+		//fmt.Println("Packet at P", p)
+		p += num
 	}
-	fmt.Printf("packet sent, wrote %d bytes\n", n)
 }
 
 type GradientTable []struct {

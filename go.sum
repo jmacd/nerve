@@ -1,4 +1,6 @@
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/jsimonetti/go-artnet v0.0.0-20200229173917-43ec7447138c h1:DEL+/ogylG7LsP9X4KCnc7ZQHKZYVYdf2tvWd6b2zgg=
+github.com/jsimonetti/go-artnet v0.0.0-20200229173917-43ec7447138c/go.mod h1:N8sFzz7wHYGJd0Hu30NVGINiKthg2EVQW9E2xBVp9VM=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/lucasb-eyer/go-colorful v1.0.3 h1:QIbQXiugsb+q10B+MI+7DI1oQLdmnep86tWFlaaUAac=
 github.com/lucasb-eyer/go-colorful v1.0.3/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=

@@ -1,4 +1,6 @@
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/google/gousb v0.0.0-20190812193832-18f4c1d8a750 h1:DVKHLo3yE4psTjD9aM2pY7EHoicaQbgmaxxvvHC6ZSM=
+github.com/google/gousb v0.0.0-20190812193832-18f4c1d8a750/go.mod h1:Tl4HdAs1ThE3gECkNwz+1MWicX6FXddhJEw7L8jRDiI=
 github.com/jsimonetti/go-artnet v0.0.0-20200229173917-43ec7447138c h1:DEL+/ogylG7LsP9X4KCnc7ZQHKZYVYdf2tvWd6b2zgg=
 github.com/jsimonetti/go-artnet v0.0.0-20200229173917-43ec7447138c/go.mod h1:N8sFzz7wHYGJd0Hu30NVGINiKthg2EVQW9E2xBVp9VM=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=

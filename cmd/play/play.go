@@ -60,7 +60,7 @@ func main() {
 
 		pattern := (seconds / 15) % 4
 
-		for twoCount := 0.0; twoCount < 2; twoCount += 0.0005 {
+		for twoCount := 0.0; twoCount < 2; twoCount += 0.005 {
 			level := twoCount
 			if level >= 1 {
 				level = 2 - level

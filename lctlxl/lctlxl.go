@@ -2,89 +2,209 @@ package lctlxl
 
 import (
 	"fmt"
+	"io"
+	"sync"
 
-	"github.com/google/gousb"
-	"github.com/google/gousb/usbid"
+	"github.com/deadsy/libusb"
 )
 
 const (
 	InNum  = 0x81
 	OutNum = 0x2
 
-	VendorID  gousb.ID = 0x1235
-	ProductID gousb.ID = 0x61
+	VendorID  = 0x1235
+	ProductID = 0x61
+
+	TimeoutMS = 1000
 
 	ProductName = "Launch Control XL"
 )
 
 type (
 	LaunchControl struct {
-		*gousb.Context
-		*gousb.Device
-		*gousb.Config
-		*gousb.InEndpoint
-		*gousb.OutEndpoint
+		ctx  libusb.Context
+		hdl  libusb.Device_Handle
+		rep  Endpoint
+		wep  Endpoint
+		wait *sync.WaitGroup
+		stop chan struct{}
+		ferr chan error
+
+		reader io.Reader
+		writer io.Writer
+
+		rdbuf []byte
+		wrbuf []byte
+	}
+
+	Endpoint struct {
+		iface int
+		ep    *libusb.Endpoint_Descriptor
 	}
 )
 
 func Open() (*LaunchControl, error) {
-	// Initialize a new Context.
-	uctx := gousb.NewContext()
-
-	// Open any device with a given VID/PID using a convenience function.
-	dev, err := uctx.OpenDeviceWithVIDPID(VendorID, ProductID)
-	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
+	lc := &LaunchControl{
+		wait: &sync.WaitGroup{},
+		stop: make(chan struct{}),
+		ferr: make(chan error),
 	}
-	if dev == nil {
+	var ctx libusb.Context
+
+	err := libusb.Init(&ctx)
+	if err != nil {
+		return nil, fmt.Errorf("init libusb: %w", err)
+	}
+
+	lc.ctx = ctx
+	lc.hdl = libusb.Open_Device_With_VID_PID(lc.ctx, VendorID, ProductID)
+
+	if lc.hdl == nil {
 		return nil, fmt.Errorf("can't find %v", ProductName)
 	}
 
-	if len(dev.Desc.Configs) != 1 {
-		return nil, fmt.Errorf("%v: unexpected configs: %d", dev, len(dev.Desc.Configs))
+	dev := libusb.Get_Device(lc.hdl)
+	if dev == nil {
+		return nil, fmt.Errorf("could not get device")
 	}
 
-	var cfgNum int
-	var cfgDesc gousb.ConfigDesc
-	for cfgNum, cfgDesc = range dev.Desc.Configs {
-		fmt.Printf("  %s:\n", cfgDesc)
-		for _, intf := range cfgDesc.Interfaces {
-			fmt.Printf("    --------------\n")
-			for _, ifSetting := range intf.AltSettings {
-				fmt.Printf("    %s\n", ifSetting)
-				fmt.Printf("      %s\n", usbid.Classify(ifSetting))
-				for _, end := range ifSetting.Endpoints {
-					fmt.Printf("      %s\n", end)
+	dd, err := libusb.Get_Device_Descriptor(dev)
+	if err != nil {
+		return nil, fmt.Errorf("device descriptor: %w", err)
+	}
+
+	var readers []Endpoint
+	var writers []Endpoint
+	found := false
+
+	for i := 0; i < int(dd.BNumConfigurations); i++ {
+		cd, err := libusb.Get_Config_Descriptor(dev, uint8(i))
+		if err != nil {
+			return nil, fmt.Errorf("get config desc %w", err)
+		}
+		for _, itf := range cd.Interface {
+			for _, id := range itf.Altsetting {
+				if id.BInterfaceClass == libusb.CLASS_AUDIO && id.BInterfaceSubClass == 3 {
+					found = true
+				}
+				for _, ep := range id.Endpoint {
+					if ep.BEndpointAddress&libusb.ENDPOINT_IN != 0 {
+						readers = append(readers, Endpoint{
+							iface: int(id.BInterfaceNumber),
+							ep:    ep,
+						})
+					} else {
+						writers = append(writers, Endpoint{
+							iface: int(id.BInterfaceNumber),
+							ep:    ep,
+						})
+					}
 				}
 			}
 		}
+
+		libusb.Free_Config_Descriptor(cd)
 	}
 
-	cfg, err := dev.Config(cfgNum)
+	if !found || len(readers) != 1 || len(writers) != 1 {
+		return nil, fmt.Errorf("Wrong number of readers/writers: %d/%d", len(readers), len(writers))
+	}
+
+	libusb.Set_Auto_Detach_Kernel_Driver(lc.hdl, true)
+
+	// claim the interfaces
+	if err := libusb.Claim_Interface(lc.hdl, readers[0].iface); err != nil {
+		return nil, fmt.Errorf("Could not get reader %w", err)
+	}
+	lc.rep = readers[0]
+	lc.rdbuf = make([]byte, lc.rep.ep.WMaxPacketSize)
+
+	if err := libusb.Claim_Interface(lc.hdl, writers[0].iface); err != nil {
+		return nil, fmt.Errorf("Could not get writer %w", err)
+	}
+	lc.wep = writers[0]
+	lc.wrbuf = make([]byte, lc.wep.ep.WMaxPacketSize)
+
+	return lc, nil
+}
+
+func (lc *LaunchControl) Start() error {
+	inrd, inwr := io.Pipe()
+	outrd, outwr := io.Pipe()
+
+	lc.reader = inrd
+
+	lc.start(func() error { return lc.read(inwr) })
+
+	lc.writer = outwr
+	lc.start(func() error { return lc.write(outrd) })
+
+	return nil
+}
+
+func (lc *LaunchControl) start(f func() error) {
+	lc.wait.Add(1)
+
+	go func() {
+		defer lc.wait.Done()
+
+		for {
+			select {
+			case <-lc.stop:
+				return
+			default:
+			}
+			err := f()
+
+			if err != nil {
+				select {
+				case lc.ferr <- err:
+					// Set first error
+				default:
+					// Pass
+				}
+			}
+		}
+	}()
+}
+
+func (lc *LaunchControl) read(write io.Writer) error {
+	data, err := libusb.Bulk_Transfer(lc.hdl, lc.rep.ep.BEndpointAddress, lc.rdbuf, TimeoutMS)
+
 	if err != nil {
-		return nil, fmt.Errorf("%v config: %w", dev, err)
+		return err
 	}
 
-	intf, err := cfg.Interface(1, 0)
-	if err != nil {
-		return nil, fmt.Errorf("%v default interface: %w", dev, err)
-	}
+	_, err = write.Write(data)
+	return err
+}
 
-	in, err := intf.InEndpoint(InNum)
-	if err != nil {
-		return nil, fmt.Errorf("%v in endpoint : %w", dev, err)
-	}
+func (lc *LaunchControl) Reader() io.Reader {
+	return lc.reader
+}
 
-	out, err := intf.OutEndpoint(OutNum)
-	if err != nil {
-		return nil, fmt.Errorf("%v out endpoint : %w", dev, err)
-	}
+func (lc *LaunchControl) write(write io.Reader) error {
+	// @@@
+	return nil
+}
 
-	return &LaunchControl{
-		Context:     uctx,
-		Device:      dev,
-		Config:      cfg,
-		InEndpoint:  in,
-		OutEndpoint: out,
-	}, nil
+func (lc *LaunchControl) Stop() error {
+	close(lc.stop)
+
+	lc.wait.Wait()
+
+	err0 := libusb.Release_Interface(lc.hdl, lc.rep.iface)
+	err1 := libusb.Release_Interface(lc.hdl, lc.wep.iface)
+
+	libusb.Close(lc.hdl)
+	libusb.Exit(lc.ctx)
+
+	if err0 != nil || err1 != nil {
+		return fmt.Errorf("stop %w %w", err0, err1)
+	}
+	return nil
+}
+
+func (lc *LaunchControl) Printf(format string, vals ...interface{}) {
+	fmt.Printf(format, vals...)
 }

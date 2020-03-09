@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/deadsy/libusb"
 )
@@ -184,7 +185,7 @@ func (lc *LaunchControl) Reader() io.Reader {
 }
 
 func (lc *LaunchControl) write(write io.Reader) error {
-	// @@@
+	time.Sleep(time.Second) // @@@
 	return nil
 }
 

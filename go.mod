@@ -2,6 +2,8 @@ module github.com/jmacd/nerve
 
 replace github.com/jmacd/go-artnet => ../go-artnet
 
+replace gitlab.com/gomidi/midi => ../../../gitlab.com/gomidi/midi
+
 go 1.13
 
 require (

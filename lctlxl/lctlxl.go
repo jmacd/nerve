@@ -206,6 +206,6 @@ func (lc *LaunchControl) Stop() error {
 	return nil
 }
 
-func (lc *LaunchControl) Printf(format string, vals ...interface{}) {
-	fmt.Printf(format, vals...)
-}
+// func (lc *LaunchControl) Printf(format string, vals ...interface{}) {
+// 	fmt.Printf(format, vals...)
+// }

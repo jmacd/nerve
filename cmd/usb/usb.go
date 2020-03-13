@@ -19,15 +19,22 @@ func main() {
 	lc.Start()
 	fmt.Println("Started...")
 
-	rd := mid.NewReader(mid.SetLogger(lc))
+	rd := mid.NewReader(mid.SetLogger(nil))
 
-	// rd.Msg.Each = func(_ *mid.Position, msg midi.Message) {
-	// 	fmt.Println(msg)
-	// }
+	rd.Msg.Channel.ControlChange.Each = func(_ *mid.Position, channel, controller, value uint8) {
 
-	// rd.Msg.Unknown = func(_ *mid.Position, msg midi.Message) {
-	// 	fmt.Println(msg)
-	// }
+		if channel != 8 {
+			// This is imaginary?
+			return
+		}
+
+		if controller == 11 {
+			// This is also imaginary.
+			return
+		}
+
+		fmt.Println("YASSSSS!", controller, value)
+	}
 
 	// wr := mid.NewWriter(lc.OutEndpoint)
 	// wr.Start()

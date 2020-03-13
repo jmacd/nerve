@@ -2,15 +2,19 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"time"
 
+	"github.com/jmacd/nerve/lctlxl"
 	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
+	"gitlab.com/gomidi/midi/mid"
 )
 
 const (
-	ipAddr = "192.168.0.22"
+	ipAddr = "192.168.1.167"
 
 	pixels = 300 // Lies (it's 299)
 	width  = 20
@@ -55,16 +59,60 @@ func main() {
 
 	start := time.Now()
 
+	lc, err := lctlxl.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer lc.Stop()
+
+	lc.Start()
+	fmt.Println("Started...")
+
+	rd := mid.NewReader(mid.SetLogger(nil))
+
+	level := 0.0
+
+	rd.Msg.Channel.ControlChange.Each = func(_ *mid.Position, channel, controller, value uint8) {
+
+		if channel != 8 {
+			// This is imaginary?
+			return
+		}
+
+		if controller == 11 {
+			// This is also imaginary.
+			return
+		}
+
+		if controller == 13 {
+			level = float64(value) / 127
+		}
+
+		//fmt.Println("YASSSSS!", controller, value)
+	}
+
+	// wr := mid.NewWriter(lc.OutEndpoint)
+	// wr.Start()
+
+	go func() {
+		for {
+			if rd.ReadAllFrom(lc.Reader()) == io.EOF {
+				fmt.Println("EOF!!")
+				break
+			}
+		}
+	}()
+
 	for {
 		seconds := time.Now().Sub(start) / time.Second
 
 		pattern := (seconds / 15) % 4
 
 		for twoCount := 0.0; twoCount < 2; twoCount += 0.005 {
-			level := twoCount
-			if level >= 1 {
-				level = 2 - level
-			}
+			// level := twoCount
+			// if level >= 1 {
+			// 	level = 2 - level
+			// }
 
 			for y := 0; y < height; y++ {
 				for x := 0; x < width; x++ {

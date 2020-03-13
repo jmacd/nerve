@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	ipAddr = "192.168.1.167"
+	// ipAddr = "192.168.1.167"  // Minna
+	ipAddr = "192.168.0.21" // Home
 
 	pixels = 300 // Lies (it's 299)
 	width  = 20

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/deadsy/libusb"
+	"gitlab.com/gomidi/midi/mid"
 )
 
 const (
@@ -36,6 +37,16 @@ type (
 
 		rdbuf []byte
 		wrbuf []byte
+
+		midiRead *mid.Reader
+		// midiWrite *mid.Writer
+
+		SendA [8]float64 // 13-20
+		SendB [8]float64 // 29-36
+		SendC [8]float64 // 49-56
+		Slide [8]float64 // 77-84
+		NoteA [8]float64 // F1-C3
+		NoteB [8]float64 // C#4-G#5
 	}
 
 	Endpoint struct {
@@ -140,6 +151,8 @@ func (lc *LaunchControl) Start() error {
 	lc.writer = outwr
 	lc.start(func() error { return lc.write(outrd) })
 
+	lc.setupMidi()
+
 	return nil
 }
 
@@ -185,7 +198,7 @@ func (lc *LaunchControl) Reader() io.Reader {
 }
 
 func (lc *LaunchControl) write(write io.Reader) error {
-	time.Sleep(time.Second) // @@@
+	time.Sleep(time.Second)
 	return nil
 }
 
@@ -206,6 +219,42 @@ func (lc *LaunchControl) Stop() error {
 	return nil
 }
 
-// func (lc *LaunchControl) Printf(format string, vals ...interface{}) {
-// 	fmt.Printf(format, vals...)
-// }
+func (lc *LaunchControl) setupMidi() {
+	lc.midiRead = mid.NewReader(mid.SetLogger(nil))
+
+	// TODO Writer
+	// wr := mid.NewWriter(lc.OutEndpoint)
+	// wr.Start()
+
+	lc.midiRead.Msg.Channel.ControlChange.Each =
+		func(_ *mid.Position, channel, controller, value uint8) {
+			// if channel != 8 {  //  This seems to vary
+			// 	return
+			// }
+
+			if controller == 11 {
+				// Imaginary (apparently).
+				return
+			}
+
+			switch {
+			case controller >= 13 && controller <= 20:
+				lc.SendA[controller-13] = float64(value) / 127
+			case controller >= 29 && controller <= 36:
+				lc.SendB[controller-29] = float64(value) / 127
+			case controller >= 49 && controller <= 56:
+				lc.SendC[controller-49] = float64(value) / 127
+			case controller >= 77 && controller <= 84:
+				lc.Slide[controller-77] = float64(value) / 127
+			}
+		}
+
+	go func() {
+		for {
+			if lc.midiRead.ReadAllFrom(lc.Reader()) == io.EOF {
+				fmt.Println("EOF")
+				break
+			}
+		}
+	}()
+}

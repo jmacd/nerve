@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"time"
@@ -10,22 +10,31 @@ import (
 	"github.com/jmacd/nerve/lctlxl"
 	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
-	"gitlab.com/gomidi/midi/mid"
+
+	"go.opentelemetry.io/otel/api/global"
+	"go.opentelemetry.io/otel/exporters/metric/stdout"
 )
 
 const (
 	// ipAddr = "192.168.1.167"  // Minna
 	ipAddr = "192.168.0.21" // Home
 
-	pixels = 300 // Lies (it's 299)
+	pixels = 300
 	width  = 20
 	height = 15
 
 	epsilon = 0.00001
 )
 
+var (
+	meter  = global.MeterProvider().Meter("main")
+	frames = meter.NewInt64Counter("frames").Bind(meter.Labels())
+)
+
 type (
 	Buffer [pixels]colorful.Color
+
+	Color = colorful.Color
 
 	Sender struct {
 		dest *net.UDPAddr
@@ -54,11 +63,24 @@ func newSender() *Sender {
 	}
 }
 
-func main() {
-	sender := newSender()
-	buffer := sender.Buffer[:]
+func telemetry() func() {
+	controller, err := stdout.NewExportPipeline(stdout.Config{}, time.Second*1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	global.SetMeterProvider(controller)
 
-	start := time.Now()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return controller.Stop
+}
+
+func main() {
+	stop := telemetry()
+	defer stop()
+
+	sender := newSender()
 
 	lc, err := lctlxl.Open()
 	if err != nil {
@@ -67,42 +89,41 @@ func main() {
 	defer lc.Stop()
 
 	lc.Start()
-	fmt.Println("Started...")
 
-	rd := mid.NewReader(mid.SetLogger(nil))
+	walk(sender, lc)
+}
 
-	level := 0.0
+func walk(sender *Sender, lc *lctlxl.LaunchControl) {
+	last := time.Now()
+	elapsed := 0.0
 
-	rd.Msg.Channel.ControlChange.Each = func(_ *mid.Position, channel, controller, value uint8) {
+	for {
+		now := time.Now()
+		delta := now.Sub(last)
 
-		if channel != 8 {
-			// This is imaginary?
-			return
+		last = now
+
+		rate := 100 * lc.SendA[0]
+
+		elapsed += rate * float64(delta.Seconds())
+
+		spot := int64(elapsed) % pixels
+
+		sender.Buffer = Buffer{}
+
+		sender.Buffer[spot] = Color{
+			R: lc.Slide[0],
+			G: lc.Slide[1],
+			B: lc.Slide[2],
 		}
 
-		if controller == 11 {
-			// This is also imaginary.
-			return
-		}
-
-		if controller == 13 {
-			level = float64(value) / 127
-		}
-
-		//fmt.Println("YASSSSS!", controller, value)
+		sender.send()
+		time.Sleep(time.Duration(10*lc.SendA[1]) * time.Millisecond)
 	}
+}
 
-	// wr := mid.NewWriter(lc.OutEndpoint)
-	// wr.Start()
-
-	go func() {
-		for {
-			if rd.ReadAllFrom(lc.Reader()) == io.EOF {
-				fmt.Println("EOF!!")
-				break
-			}
-		}
-	}()
+func colors(sender *Sender, lc *lctlxl.LaunchControl) {
+	start := time.Now()
 
 	for {
 		seconds := time.Now().Sub(start) / time.Second
@@ -110,14 +131,11 @@ func main() {
 		pattern := (seconds / 15) % 4
 
 		for twoCount := 0.0; twoCount < 2; twoCount += 0.005 {
-			// level := twoCount
-			// if level >= 1 {
-			// 	level = 2 - level
-			// }
+			level := lc.SendA[0]
 
 			for y := 0; y < height; y++ {
 				for x := 0; x < width; x++ {
-					var c colorful.Color
+					var c Color
 
 					switch pattern {
 					case 0:
@@ -146,7 +164,7 @@ func main() {
 						)
 					}
 
-					buffer[y*width+x] = c.Clamped()
+					sender.Buffer[y*width+x] = c.Clamped()
 
 				}
 			}
@@ -160,6 +178,8 @@ func main() {
 func (s *Sender) send() {
 	data := s.ArtDMXPacket.Data[:]
 	s.ArtDMXPacket.SubUni = 0
+
+	frames.Add(context.Background(), 1)
 
 	for p := 0; p < pixels; {
 
@@ -185,24 +205,4 @@ func (s *Sender) send() {
 		s.ArtDMXPacket.SubUni++
 		p += num
 	}
-}
-
-type GradientTable []struct {
-	Col colorful.Color
-	Pos float64
-}
-
-func (self GradientTable) GetInterpolatedColorFor(t float64) colorful.Color {
-	for i := 0; i < len(self)-1; i++ {
-		c1 := self[i]
-		c2 := self[i+1]
-		if c1.Pos <= t && t <= c2.Pos {
-			// We are in between c1 and c2. Go blend them!
-			t := (t - c1.Pos) / (c2.Pos - c1.Pos)
-			return c1.Col.BlendHcl(c2.Col, t).Clamped()
-		}
-	}
-
-	// Nothing found? Means we're at (or past) the last gradient keypoint.
-	return self[len(self)-1].Col
 }

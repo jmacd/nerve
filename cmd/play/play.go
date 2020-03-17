@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"time"
 
+	"github.com/hsluv/hsluv-go"
 	"github.com/jmacd/nerve/lctlxl"
 	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
@@ -16,7 +18,7 @@ import (
 )
 
 const (
-	// ipAddr = "192.168.1.167"  // Minna
+	// ipAddr = "192.168.1.167"  // Bldg
 	ipAddr = "192.168.0.21" // Home
 
 	pixels = 300
@@ -90,14 +92,158 @@ func main() {
 
 	lc.Start()
 
-	walk(sender, lc)
+	white(sender, lc)
+}
+
+func white(sender *Sender, lc *lctlxl.LaunchControl) {
+	for {
+		level := lc.SendA[0]
+
+		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				var c Color
+				// Hmm
+
+				c = colorful.Color{level, level, level}
+				c = colorful.Xyy(c.XyyWhiteRef(wref))
+
+				sender.Buffer[y*width+x] = c.Clamped()
+
+			}
+		}
+
+		sender.send()
+		time.Sleep(time.Millisecond * 10)
+	}
+}
+
+func hcl(sender *Sender, lc *lctlxl.LaunchControl) {
+	for {
+		level := lc.SendA[0]
+
+		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				var c Color
+
+				c = colorful.HclWhiteRef(
+					360*(float64(x)+epsilon)/(width-1+epsilon),
+					(float64(y)+epsilon)/(height-1+epsilon),
+					level,
+					wref,
+				)
+
+				sender.Buffer[y*width+x] = c.Clamped()
+
+			}
+		}
+
+		sender.send()
+		time.Sleep(time.Millisecond * 10)
+	}
+}
+
+func luv(sender *Sender, lc *lctlxl.LaunchControl) {
+	for {
+		level := lc.SendA[0]
+
+		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				var c Color
+
+				c = colorful.LuvWhiteRef(
+					level,
+					(float64(y)+epsilon)/(height-1+epsilon),
+					(float64(x)+epsilon)/(width-1+epsilon),
+					wref,
+				)
+
+				sender.Buffer[y*width+x] = c.Clamped()
+
+			}
+		}
+
+		sender.send()
+		time.Sleep(time.Millisecond * 10)
+	}
+}
+
+func lab(sender *Sender, lc *lctlxl.LaunchControl) {
+	for {
+		level := lc.SendA[0]
+
+		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				var c Color
+
+				c = colorful.LabWhiteRef(
+					level,
+					(float64(y)+epsilon)/(height-1+epsilon),
+					(float64(x)+epsilon)/(width-1+epsilon),
+					wref,
+				)
+
+				sender.Buffer[y*width+x] = c.Clamped()
+
+			}
+		}
+
+		sender.send()
+		time.Sleep(time.Millisecond * 10)
+	}
+}
+
+func showHsluv(sender *Sender, lc *lctlxl.LaunchControl) {
+	for frame := 0; ; frame++ {
+		r, g, b := hsluv.HsluvToRGB(360*lc.Slide[0], 100*lc.Slide[1], 100*lc.Slide[2])
+
+		for x := 0; x < width; x++ {
+			for y := 0; y < height; y++ {
+				sender.Buffer[y*width+x] = Color{
+					R: r,
+					G: g,
+					B: b,
+				}
+			}
+		}
+
+		sender.send()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func gamma(sender *Sender, lc *lctlxl.LaunchControl) {
+	for frame := 0; ; frame++ {
+		gamma := math.Max(lc.SendA[0]*3, 0.001)
+		//gamma = 1.0
+
+		for x := 0; x < width; x++ {
+			for y := 0; y < height; y++ {
+				sender.Buffer[y*width+x] = Color{
+					R: math.Pow(float64(x)/float64(width), gamma),
+					G: math.Pow(float64(x)/float64(width), gamma),
+					B: math.Pow(float64(x)/float64(width), gamma),
+				}
+			}
+		}
+
+		sender.send()
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func walk(sender *Sender, lc *lctlxl.LaunchControl) {
 	last := time.Now()
 	elapsed := 0.0
 
-	for {
+	for frame := 0; ; frame++ {
 		now := time.Now()
 		delta := now.Sub(last)
 
@@ -108,17 +254,40 @@ func walk(sender *Sender, lc *lctlxl.LaunchControl) {
 		elapsed += rate * float64(delta.Seconds())
 
 		spot := int64(elapsed) % pixels
-
-		sender.Buffer = Buffer{}
-
 		sender.Buffer[spot] = Color{
-			R: lc.Slide[0],
-			G: lc.Slide[1],
-			B: lc.Slide[2],
+			R: lc.Slide[0] * lc.SendA[1],
+			G: lc.Slide[1] * lc.SendA[1],
+			B: lc.Slide[2] * lc.SendA[1],
 		}
 
 		sender.send()
-		time.Sleep(time.Duration(10*lc.SendA[1]) * time.Millisecond)
+		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
+	}
+}
+
+func strobe2(sender *Sender, lc *lctlxl.LaunchControl) {
+	for frame := 0; ; frame++ {
+
+		if frame%2 == 0 {
+			for i := 0; i < pixels; i++ {
+				sender.Buffer[i] = Color{
+					R: lc.Slide[3] * lc.SendA[1],
+					G: lc.Slide[4] * lc.SendA[1],
+					B: lc.Slide[5] * lc.SendA[1],
+				}
+			}
+		} else {
+			for i := 0; i < pixels; i++ {
+				sender.Buffer[i] = Color{
+					R: lc.Slide[0] * lc.SendA[1],
+					G: lc.Slide[1] * lc.SendA[1],
+					B: lc.Slide[2] * lc.SendA[1],
+				}
+			}
+		}
+
+		sender.send()
+		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
 	}
 }
 

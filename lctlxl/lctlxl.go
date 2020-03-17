@@ -61,6 +61,13 @@ func Open() (*LaunchControl, error) {
 		stop: make(chan struct{}),
 		ferr: make(chan error),
 	}
+	for i := 0; i < 8; i++ {
+		lc.SendA[i] = 1
+		lc.SendB[i] = 1
+		lc.SendC[i] = 1
+		lc.Slide[i] = 1
+	}
+
 	var ctx libusb.Context
 
 	err := libusb.Init(&ctx)

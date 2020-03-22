@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hsluv/hsluv-go"
+	"github.com/jkl1337/go-chromath"
 	"github.com/jmacd/nerve/lctlxl"
 	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
@@ -18,19 +19,32 @@ import (
 )
 
 const (
-	// ipAddr = "192.168.1.167"  // Bldg
+	//ipAddr = "192.168.1.167" // Bldg
 	ipAddr = "192.168.0.21" // Home
 
 	pixels = 300
 	width  = 20
 	height = 15
 
-	epsilon = 0.00001
+	maxPerPacket = 170
+
+	epsilon = 0 // 0.00001
+
+	gammaDefault  = 1.8
+	gammaKnobMult = 1.0
 )
 
 var (
 	meter  = global.MeterProvider().Meter("main")
 	frames = meter.NewInt64Counter("frames").Bind(meter.Labels())
+
+	redGammaLUT   = [256][256]byte{}
+	greenGammaLUT = [256][256]byte{}
+	blueGammaLUT  = [256][256]byte{}
+
+	redGammaValue   = gammaDefault
+	greenGammaValue = gammaDefault
+	blueGammaValue  = gammaDefault
 )
 
 type (
@@ -79,10 +93,13 @@ func telemetry() func() {
 }
 
 func main() {
+	var sender *Sender
+	var lc *lctlxl.LaunchControl
+
 	stop := telemetry()
 	defer stop()
 
-	sender := newSender()
+	sender = newSender()
 
 	lc, err := lctlxl.Open()
 	if err != nil {
@@ -92,22 +109,121 @@ func main() {
 
 	lc.Start()
 
-	white(sender, lc)
+	tilesnake(sender, lc)
 }
 
-func white(sender *Sender, lc *lctlxl.LaunchControl) {
+func factors(n int) []int {
+	sq := math.Sqrt(float64(n))
+	var fs []int
+
+	for i := 2; i <= int(sq); i++ {
+		if n%i != 0 {
+			continue
+		}
+		fs = append(fs, i)
+	}
+	return fs
+}
+
+func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
+	wf := factors(width)
+	hf := factors(height)
+
+	// tw := wf[len(wf)-1]
+	// th := hf[len(hf)-1]
+	tw := wf[len(wf)-1]
+	th := hf[len(hf)-1]
+
+	patW := pixels / height / tw
+	patH := pixels / width / th
+
+	cnt := pixels / tw / th
+
+	last := time.Now()
+	elapsed := 0.0
+
+	rgb2xyz := chromath.NewRGBTransformer(
+		&chromath.SpaceSRGB,
+		&chromath.AdaptationBradford,
+		&chromath.IlluminantRefD65,
+		&chromath.Scaler8bClamping,
+		1.0,
+		nil)
+
+	for {
+		now := time.Now()
+		delta := now.Sub(last)
+		last = now
+
+		elapsed += 50 * lc.SendA[0] * float64(delta) / float64(time.Second)
+
+		wX, wY, wZ := colorful.XyyToXyz(0.3+(lc.SendA[2]-0.5)/2, 0.3+(lc.SendA[3]-0.5)/2, 1)
+
+		targetIlluminant := &chromath.IlluminantRef{
+			XYZ:      chromath.XYZ{wX, wY, wZ},
+			Observer: chromath.CIE2,
+			Standard: nil,
+		}
+
+		xyz2rgb := chromath.NewRGBTransformer(
+			&chromath.SpaceSRGB,
+			&chromath.AdaptationBradford,
+			targetIlluminant,
+			&chromath.Scaler8bClamping,
+			1.0,
+			nil)
+
+		for i := 0; i < patW; i++ {
+			for j := 0; j < patH; j++ {
+				var cidx int
+
+				if j%2 == 0 {
+					cidx = j*patW + i
+				} else {
+					cidx = (j+1)*patW - 1 - i
+				}
+
+				cangle := ((float64(cidx) + elapsed) / float64(cnt))
+				cangle -= float64(int64(cangle))
+
+				r, g, b := hsluv.HsluvToRGB(360*cangle, 100*lc.Slide[1], 100*lc.Slide[2])
+				c0 := Color{R: r, G: g, B: b}
+
+				cxyz := rgb2xyz.Convert(chromath.RGB{c0.R, c0.G, c0.B})
+				crgb := xyz2rgb.Invert(cxyz)
+
+				c1 := Color{R: crgb[0], G: crgb[1], B: crgb[2]}
+
+				for x := 0; x < tw; x++ {
+					for y := 0; y < th; y++ {
+						idx := (j*th+y)*width + (i*tw + x)
+						sender.Buffer[idx] = c1
+					}
+				}
+			}
+		}
+		sender.send()
+		time.Sleep(time.Duration(float64(50*time.Millisecond) * lc.SendA[1]))
+	}
+}
+
+func luv(sender *Sender, lc *lctlxl.LaunchControl) {
 	for {
 		level := lc.SendA[0]
 
-		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[1], 0.5*lc.SendA[2], 1)
+		wref := [3]float64{wX, wY, wZ}
 
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
 				var c Color
-				// Hmm
 
-				c = colorful.Color{level, level, level}
-				c = colorful.Xyy(c.XyyWhiteRef(wref))
+				c = colorful.LuvWhiteRef(
+					level,
+					(float64(y)+epsilon)/(height-1+epsilon),
+					(float64(x)+epsilon)/(width-1+epsilon),
+					wref,
+				)
 
 				sender.Buffer[y*width+x] = c.Clamped()
 
@@ -146,38 +262,12 @@ func hcl(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func luv(sender *Sender, lc *lctlxl.LaunchControl) {
-	for {
-		level := lc.SendA[0]
-
-		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
-
-		for y := 0; y < height; y++ {
-			for x := 0; x < width; x++ {
-				var c Color
-
-				c = colorful.LuvWhiteRef(
-					level,
-					(float64(y)+epsilon)/(height-1+epsilon),
-					(float64(x)+epsilon)/(width-1+epsilon),
-					wref,
-				)
-
-				sender.Buffer[y*width+x] = c.Clamped()
-
-			}
-		}
-
-		sender.send()
-		time.Sleep(time.Millisecond * 10)
-	}
-}
-
 func lab(sender *Sender, lc *lctlxl.LaunchControl) {
 	for {
 		level := lc.SendA[0]
 
-		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[1], 0.5*lc.SendA[2], 1)
+		wref := [3]float64{wX, wY, wZ}
 
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
@@ -202,15 +292,22 @@ func lab(sender *Sender, lc *lctlxl.LaunchControl) {
 
 func showHsluv(sender *Sender, lc *lctlxl.LaunchControl) {
 	for frame := 0; ; frame++ {
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[0], 0.5*lc.SendA[1], 1)
+		wref := [3]float64{wX, wY, wZ}
+
 		r, g, b := hsluv.HsluvToRGB(360*lc.Slide[0], 100*lc.Slide[1], 100*lc.Slide[2])
+		c := Color{R: r, G: g, B: b}
+		//fmt.Println("COLOR IN", c, wref)
+		x1, y1, z1 := c.Xyz()
+		//fmt.Println("XYZ", x1, y1, z1)
+		x2, y2, Y2 := colorful.XyzToXyyWhiteRef(x1, y1, z1, wref)
+		//fmt.Println("XYY", x2, y2, Y2)
+		c = colorful.Xyy(x2, y2, Y2)
+		//fmt.Println("RGB", c.R, c.G, c.B)
 
 		for x := 0; x < width; x++ {
 			for y := 0; y < height; y++ {
-				sender.Buffer[y*width+x] = Color{
-					R: r,
-					G: g,
-					B: b,
-				}
+				sender.Buffer[y*width+x] = c
 			}
 		}
 
@@ -352,7 +449,7 @@ func (s *Sender) send() {
 
 	for p := 0; p < pixels; {
 
-		num := 170
+		num := maxPerPacket
 		if pixels-p < num {
 			num = pixels - p
 		}
@@ -363,6 +460,7 @@ func (s *Sender) send() {
 			data[i*3+1] = byte(c.G * 255)
 			data[i*3+2] = byte(c.B * 255)
 		}
+		s.ArtDMXPacket.Length = uint16(num)
 
 		b, _ := s.ArtDMXPacket.MarshalBinary()
 

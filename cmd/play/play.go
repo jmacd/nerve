@@ -131,8 +131,8 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 
 	// tw := wf[len(wf)-1]
 	// th := hf[len(hf)-1]
-	tw := wf[len(wf)-1]
-	th := hf[len(hf)-1]
+	tw := wf[0]
+	th := hf[0]
 
 	patW := pixels / height / tw
 	patH := pixels / width / th
@@ -146,9 +146,11 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 		&chromath.SpaceSRGB,
 		&chromath.AdaptationBradford,
 		&chromath.IlluminantRefD65,
-		&chromath.Scaler8bClamping,
+		nil, // &chromath.Scaler8bClamping,
 		1.0,
-		nil)
+		chromath.SRGBCompander.Init(&chromath.SpaceSRGB))
+
+	lab2xyzD65 := chromath.NewLabTransformer(&chromath.IlluminantRefD65)
 
 	for {
 		now := time.Now()
@@ -165,13 +167,7 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 			Standard: nil,
 		}
 
-		xyz2rgb := chromath.NewRGBTransformer(
-			&chromath.SpaceSRGB,
-			&chromath.AdaptationBradford,
-			targetIlluminant,
-			&chromath.Scaler8bClamping,
-			1.0,
-			nil)
+		lab2xyz := chromath.NewLabTransformer(targetIlluminant)
 
 		for i := 0; i < patW; i++ {
 			for j := 0; j < patH; j++ {
@@ -189,10 +185,14 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				r, g, b := hsluv.HsluvToRGB(360*cangle, 100*lc.Slide[1], 100*lc.Slide[2])
 				c0 := Color{R: r, G: g, B: b}
 
+				fmt.Println("C0", c0)
 				cxyz := rgb2xyz.Convert(chromath.RGB{c0.R, c0.G, c0.B})
-				crgb := xyz2rgb.Invert(cxyz)
+				clab := lab2xyz.Invert(cxyz)
+				cxyz = lab2xyzD65.Convert(clab)
+				crgb := rgb2xyz.Invert(cxyz)
 
 				c1 := Color{R: crgb[0], G: crgb[1], B: crgb[2]}
+				fmt.Println("C1", c1)
 
 				for x := 0; x < tw; x++ {
 					for y := 0; y < th; y++ {

@@ -146,11 +146,12 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 		&chromath.SpaceSRGB,
 		&chromath.AdaptationBradford,
 		&chromath.IlluminantRefD65,
-		nil, // &chromath.Scaler8bClamping,
+		nil,
 		1.0,
 		chromath.SRGBCompander.Init(&chromath.SpaceSRGB))
 
-	lab2xyzD65 := chromath.NewLabTransformer(&chromath.IlluminantRefD65)
+	D65 := colorful.D65
+	setX, setY, _ := colorful.XyzToXyy(D65[0], D65[1], D65[2])
 
 	for {
 		now := time.Now()
@@ -159,7 +160,7 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 
 		elapsed += 50 * lc.SendA[0] * float64(delta) / float64(time.Second)
 
-		wX, wY, wZ := colorful.XyyToXyz(0.3+(lc.SendA[2]-0.5)/2, 0.3+(lc.SendA[3]-0.5)/2, 1)
+		wX, wY, wZ := colorful.XyyToXyz(setX+(lc.SendA[2]-0.5)/10, setY+(lc.SendA[3]-0.5)/10, 1)
 
 		targetIlluminant := &chromath.IlluminantRef{
 			XYZ:      chromath.XYZ{wX, wY, wZ},
@@ -167,7 +168,13 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 			Standard: nil,
 		}
 
-		lab2xyz := chromath.NewLabTransformer(targetIlluminant)
+		xyz2rgb := chromath.NewRGBTransformer(
+			&chromath.SpaceSRGB,
+			&chromath.AdaptationBradford,
+			targetIlluminant,
+			nil,
+			1.0,
+			chromath.SRGBCompander.Init(&chromath.SpaceSRGB))
 
 		for i := 0; i < patW; i++ {
 			for j := 0; j < patH; j++ {
@@ -185,14 +192,11 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				r, g, b := hsluv.HsluvToRGB(360*cangle, 100*lc.Slide[1], 100*lc.Slide[2])
 				c0 := Color{R: r, G: g, B: b}
 
-				fmt.Println("C0", c0)
 				cxyz := rgb2xyz.Convert(chromath.RGB{c0.R, c0.G, c0.B})
-				clab := lab2xyz.Invert(cxyz)
-				cxyz = lab2xyzD65.Convert(clab)
-				crgb := rgb2xyz.Invert(cxyz)
+
+				crgb := xyz2rgb.Invert(cxyz)
 
 				c1 := Color{R: crgb[0], G: crgb[1], B: crgb[2]}
-				fmt.Println("C1", c1)
 
 				for x := 0; x < tw; x++ {
 					for y := 0; y < th; y++ {

@@ -20,7 +20,7 @@ import (
 
 const (
 	//ipAddr = "192.168.1.167" // Bldg
-	ipAddr = "192.168.0.21" // Home
+	ipAddr = "192.168.0.23" // Home
 
 	pixels = 300
 	width  = 20
@@ -96,8 +96,8 @@ func main() {
 	var sender *Sender
 	var lc *lctlxl.LaunchControl
 
-	stop := telemetry()
-	defer stop()
+	// stop := telemetry()
+	// defer stop()
 
 	sender = newSender()
 
@@ -109,7 +109,14 @@ func main() {
 
 	lc.Start()
 
-	tilesnake(sender, lc)
+	scroller(sender, lc)
+}
+
+func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
+	// https://github.com/tfriedel6/canvas/blob/master/examples/glfw/glfw.go
+	// with glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	// ...
+
 }
 
 func factors(n int) []int {
@@ -206,8 +213,14 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				}
 			}
 		}
+
+		// Haha
+		// rand.Shuffle(pixels, func(i, j int) {
+		// 	sender.Buffer[i], sender.Buffer[j] = sender.Buffer[j], sender.Buffer[i]
+		// })
+
 		sender.send()
-		time.Sleep(time.Duration(float64(50*time.Millisecond) * lc.SendA[1]))
+		time.Sleep(time.Duration(float64(5*time.Millisecond) * lc.SendA[1]))
 	}
 }
 

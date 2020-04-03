@@ -20,7 +20,7 @@ import (
 
 const (
 	//ipAddr = "192.168.1.167" // Bldg
-	ipAddr = "192.168.0.21" // Home
+	ipAddr = "192.168.0.23" // Home
 
 	pixels = 300
 	width  = 20
@@ -96,8 +96,8 @@ func main() {
 	var sender *Sender
 	var lc *lctlxl.LaunchControl
 
-	stop := telemetry()
-	defer stop()
+	// stop := telemetry()
+	// defer stop()
 
 	sender = newSender()
 
@@ -109,7 +109,14 @@ func main() {
 
 	lc.Start()
 
-	tilesnake(sender, lc)
+	scroller(sender, lc)
+}
+
+func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
+	// https://github.com/tfriedel6/canvas/blob/master/examples/glfw/glfw.go
+	// with glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+	// ...
+
 }
 
 func factors(n int) []int {
@@ -131,8 +138,8 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 
 	// tw := wf[len(wf)-1]
 	// th := hf[len(hf)-1]
-	tw := wf[len(wf)-1]
-	th := hf[len(hf)-1]
+	tw := wf[0]
+	th := hf[0]
 
 	patW := pixels / height / tw
 	patH := pixels / width / th
@@ -146,9 +153,12 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 		&chromath.SpaceSRGB,
 		&chromath.AdaptationBradford,
 		&chromath.IlluminantRefD65,
-		&chromath.Scaler8bClamping,
+		nil,
 		1.0,
-		nil)
+		chromath.SRGBCompander.Init(&chromath.SpaceSRGB))
+
+	D65 := colorful.D65
+	setX, setY, _ := colorful.XyzToXyy(D65[0], D65[1], D65[2])
 
 	for {
 		now := time.Now()
@@ -157,7 +167,7 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 
 		elapsed += 50 * lc.SendA[0] * float64(delta) / float64(time.Second)
 
-		wX, wY, wZ := colorful.XyyToXyz(0.3+(lc.SendA[2]-0.5)/2, 0.3+(lc.SendA[3]-0.5)/2, 1)
+		wX, wY, wZ := colorful.XyyToXyz(setX+(lc.SendA[2]-0.5)/10, setY+(lc.SendA[3]-0.5)/10, 1)
 
 		targetIlluminant := &chromath.IlluminantRef{
 			XYZ:      chromath.XYZ{wX, wY, wZ},
@@ -169,9 +179,9 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 			&chromath.SpaceSRGB,
 			&chromath.AdaptationBradford,
 			targetIlluminant,
-			&chromath.Scaler8bClamping,
+			nil,
 			1.0,
-			nil)
+			chromath.SRGBCompander.Init(&chromath.SpaceSRGB))
 
 		for i := 0; i < patW; i++ {
 			for j := 0; j < patH; j++ {
@@ -190,6 +200,7 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				c0 := Color{R: r, G: g, B: b}
 
 				cxyz := rgb2xyz.Convert(chromath.RGB{c0.R, c0.G, c0.B})
+
 				crgb := xyz2rgb.Invert(cxyz)
 
 				c1 := Color{R: crgb[0], G: crgb[1], B: crgb[2]}
@@ -202,8 +213,14 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				}
 			}
 		}
+
+		// Haha
+		// rand.Shuffle(pixels, func(i, j int) {
+		// 	sender.Buffer[i], sender.Buffer[j] = sender.Buffer[j], sender.Buffer[i]
+		// })
+
 		sender.send()
-		time.Sleep(time.Duration(float64(50*time.Millisecond) * lc.SendA[1]))
+		time.Sleep(time.Duration(float64(5*time.Millisecond) * lc.SendA[1]))
 	}
 }
 

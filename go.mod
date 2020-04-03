@@ -16,6 +16,7 @@ require (
 	github.com/jkl1337/go-chromath v0.0.0-20140428033135-240283655afd
 	github.com/jsimonetti/go-artnet v0.0.0-20200229173917-43ec7447138c
 	github.com/lucasb-eyer/go-colorful v1.0.3
+	github.com/tfriedel6/canvas v0.11.1
 	gitlab.com/gomidi/midi v1.14.1
 	go.opentelemetry.io/otel v0.2.3
 	golang.org/x/image v0.0.0-20200119044424-58c23975cae1 // indirect

@@ -485,15 +485,15 @@ func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
 
 	for {
 		dc := gg.NewContextForRGBA(img)
-		dc.SetRGB(1, 1, 1)
+		dc.SetRGB(lc.Slide[5], lc.Slide[6], lc.Slide[7])
 		dc.Clear()
-		dc.SetRGB(0, 0, 0)
+		dc.SetRGB(lc.Slide[1], lc.Slide[2], lc.Slide[3])
 		for i := 0; i <= N; i++ {
 			t := float64(i) / N
 			d := t*S*10*lc.SendA[0] + lc.SendA[1]
 			a := t * math.Pi * 10 * lc.SendA[2]
-			x := S/2 + math.Cos(a)*d
-			y := S/2 + math.Sin(a)*d
+			x := width/2 + math.Cos(a)*d
+			y := height/2 + math.Sin(a)*d
 			r := t * lc.SendA[3] * 8
 			dc.DrawCircle(x, y, r)
 		}

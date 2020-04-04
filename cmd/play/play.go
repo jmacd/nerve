@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"image"
 	"log"
 	"math"
 	"net"
 	"time"
 
+	"github.com/fogleman/gg"
 	"github.com/hsluv/hsluv-go"
 	"github.com/jkl1337/go-chromath"
 	"github.com/jmacd/nerve/lctlxl"
@@ -15,6 +17,7 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 
 	"go.opentelemetry.io/otel/api/global"
+	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/exporters/metric/stdout"
 )
 
@@ -22,41 +25,28 @@ const (
 	//ipAddr = "192.168.1.167" // Bldg
 	ipAddr = "192.168.0.23" // Home
 
-	pixels = 300
 	width  = 20
 	height = 15
+	pixels = width * height
 
 	maxPerPacket = 170
 
 	epsilon = 0 // 0.00001
-
-	gammaDefault  = 1.8
-	gammaKnobMult = 1.0
 )
 
 var (
-	meter  = global.MeterProvider().Meter("main")
-	frames = meter.NewInt64Counter("frames").Bind(meter.Labels())
-
-	redGammaLUT   = [256][256]byte{}
-	greenGammaLUT = [256][256]byte{}
-	blueGammaLUT  = [256][256]byte{}
-
-	redGammaValue   = gammaDefault
-	greenGammaValue = gammaDefault
-	blueGammaValue  = gammaDefault
+	meter  = global.Meter("main")
+	frames = metric.Must(meter).NewInt64Counter("frames").Bind()
 )
 
 type (
-	Buffer [pixels]colorful.Color
-
 	Color = colorful.Color
 
 	Sender struct {
 		dest *net.UDPAddr
 		conn *net.UDPConn
 
-		Buffer
+		Buffer [pixels]colorful.Color
 		packet.ArtDMXPacket
 	}
 )
@@ -110,13 +100,6 @@ func main() {
 	lc.Start()
 
 	scroller(sender, lc)
-}
-
-func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
-	// https://github.com/tfriedel6/canvas/blob/master/examples/glfw/glfw.go
-	// with glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-	// ...
-
 }
 
 func factors(n int) []int {
@@ -488,5 +471,46 @@ func (s *Sender) send() {
 
 		s.ArtDMXPacket.SubUni++
 		p += num
+	}
+}
+
+func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
+	img := image.NewRGBA(image.Rectangle{
+		Min: image.Point{0, 0},
+		Max: image.Point{width, height},
+	})
+
+	const S = height
+	const N = height * 2
+
+	for {
+		dc := gg.NewContextForRGBA(img)
+		dc.SetRGB(1, 1, 1)
+		dc.Clear()
+		dc.SetRGB(0, 0, 0)
+		for i := 0; i <= N; i++ {
+			t := float64(i) / N
+			d := t*S*10*lc.SendA[0] + lc.SendA[1]
+			a := t * math.Pi * 10 * lc.SendA[2]
+			x := S/2 + math.Cos(a)*d
+			y := S/2 + math.Sin(a)*d
+			r := t * lc.SendA[3] * 8
+			dc.DrawCircle(x, y, r)
+		}
+		dc.Fill()
+
+		for x := 0; x < width; x++ {
+			for y := 0; y < height; y++ {
+				idx := y*width + x
+				value := img.RGBAAt(x, y)
+				sender.Buffer[idx] = colorful.Color{
+					R: float64(value.R) / 255,
+					G: float64(value.G) / 255,
+					B: float64(value.B) / 255,
+				}
+			}
+		}
+		sender.send()
+		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
 	}
 }

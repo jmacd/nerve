@@ -4,6 +4,8 @@ replace github.com/jmacd/go-artnet => ../go-artnet
 
 replace gitlab.com/gomidi/midi => ../../../gitlab.com/gomidi/midi
 
+replace github.com/fogleman/gg => ../../fogleman/gg
+
 go 1.13
 
 require (

@@ -7,7 +7,10 @@ import (
 	"log"
 	"math"
 	"net"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/fogleman/gg"
 	"github.com/hsluv/hsluv-go"
@@ -31,7 +34,8 @@ const (
 
 	maxPerPacket = 170
 
-	epsilon = 0 // 0.00001
+	zeroOffset = 0
+	epsilon    = 0.00001
 )
 
 var (
@@ -220,8 +224,8 @@ func luv(sender *Sender, lc *lctlxl.LaunchControl) {
 
 				c = colorful.LuvWhiteRef(
 					level,
-					(float64(y)+epsilon)/(height-1+epsilon),
-					(float64(x)+epsilon)/(width-1+epsilon),
+					(float64(y)+zeroOffset)/(height-1+zeroOffset),
+					(float64(x)+zeroOffset)/(width-1+zeroOffset),
 					wref,
 				)
 
@@ -246,8 +250,8 @@ func hcl(sender *Sender, lc *lctlxl.LaunchControl) {
 				var c Color
 
 				c = colorful.HclWhiteRef(
-					360*(float64(x)+epsilon)/(width-1+epsilon),
-					(float64(y)+epsilon)/(height-1+epsilon),
+					360*(float64(x)+zeroOffset)/(width-1+zeroOffset),
+					(float64(y)+zeroOffset)/(height-1+zeroOffset),
 					level,
 					wref,
 				)
@@ -275,8 +279,8 @@ func lab(sender *Sender, lc *lctlxl.LaunchControl) {
 
 				c = colorful.LabWhiteRef(
 					level,
-					(float64(y)+epsilon)/(height-1+epsilon),
-					(float64(x)+epsilon)/(width-1+epsilon),
+					(float64(y)+zeroOffset)/(height-1+zeroOffset),
+					(float64(x)+zeroOffset)/(width-1+zeroOffset),
 					wref,
 				)
 
@@ -412,8 +416,8 @@ func colors(sender *Sender, lc *lctlxl.LaunchControl) {
 						)
 					case 1:
 						c = colorful.Xyy(
-							(float64(y)+epsilon)/(height-1+epsilon),
-							(float64(x)+epsilon)/(width-1+epsilon),
+							(float64(y)+zeroOffset)/(height-1+zeroOffset),
+							(float64(x)+zeroOffset)/(width-1+zeroOffset),
 							level,
 						)
 					case 2:
@@ -474,6 +478,62 @@ func (s *Sender) send() {
 	}
 }
 
+type scrollFrag struct {
+	pixWidth  float64
+	pixOffset float64
+	chars     string
+}
+
+func prepareString(dc *gg.Context, orig string) (render string, frags []scrollFrag) {
+	var sb strings.Builder
+
+	for len(orig) != 0 {
+		r, size := utf8.DecodeRuneInString(orig)
+		if unicode.IsSpace(r) {
+			sb.WriteRune(' ')
+		} else {
+			sb.WriteRune(r)
+		}
+		orig = orig[size:]
+	}
+
+	orig = sb.String()
+	render = orig
+	offset := 0.0
+
+	for len(orig) > 0 {
+		prefixSize := 0
+		leadingWidth := 0.0
+
+		for {
+			_, size := utf8.DecodeRuneInString(orig)
+			prefixSize += size
+
+			allWidth, _ := dc.MeasureString(orig)
+			leadingWidth, _ = dc.MeasureString(orig[0:prefixSize])
+			trailingWidth, _ := dc.MeasureString(orig[prefixSize:])
+
+			if math.Abs(leadingWidth+trailingWidth-allWidth) >= epsilon {
+				continue
+			}
+
+			break
+		}
+
+		frags = append(frags, scrollFrag{
+			pixOffset: offset,
+			pixWidth:  leadingWidth,
+			chars:     orig[0:prefixSize],
+		})
+
+		offset += leadingWidth
+
+		orig = orig[prefixSize:]
+	}
+
+	return
+}
+
 func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
 	img := image.NewRGBA(image.Rectangle{
 		Min: image.Point{0, 0},
@@ -483,21 +543,81 @@ func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
 	const S = height
 	const N = height * 2
 
+	const T = `
+Hello, hello, 
+and welcome to my show.
+Yes, I'm belting while not melting,
+even though I'm made of snow.
+Perhaps you might recall,
+I once needed my own flurry.
+But now you need not worry...
+
+Who can handle this enormous candle?
+Unmeltable me.
+Who's not sweating this sweltering setting?
+Unmeltable me.
+Yes, Elsa's powers grew,
+and it's a whole new situation.
+Because of our relation,
+I now have self-refrigeration.
+
+Who is present, but not liquescent?
+(That's right, I just learned to read, and I like the big words.)
+Unmeltable me.
+Who's super cuddly and not all puddly?
+Unmeltable me.
+Who's inexhaustible, indefrostable, humble and fun?
+It's unmeltable --
+Oh, thank goodness you're here. Grab a seat, just about to bring it on home --
+Meeeee!
+`
+
+	dc := gg.NewContextForRGBA(img)
+
+	render, _ := prepareString(dc, T)
+
+	// Position of the start of the string
+	offset := float64(width / 2)
+	lastTime := time.Now()
+
+	currentFontSize := 0.0
+
 	for {
-		dc := gg.NewContextForRGBA(img)
+		fontSize := 6 + lc.SendA[6]*20
+
+		if currentFontSize != fontSize {
+			if err := dc.LoadFontFace("/System/Library/Fonts/Avenir.ttc", fontSize); err != nil {
+				panic(err)
+			}
+			currentFontSize = fontSize
+		}
+
+		rate := (lc.SendA[7] - 0.5) * 200
+		fmt.Println("RATE", rate, lc.SendA[7], lc.SendA[7]-0.5)
+
+		now := time.Now()
+		delta := now.Sub(lastTime).Seconds()
+		lastTime = now
+		offset += rate * delta
+
+		// fmt.Println("OFFSET", offset)
+
 		dc.SetRGB(lc.Slide[5], lc.Slide[6], lc.Slide[7])
 		dc.Clear()
-		dc.SetRGB(lc.Slide[1], lc.Slide[2], lc.Slide[3])
-		for i := 0; i <= N; i++ {
-			t := float64(i) / N
-			d := t*S*10*lc.SendA[0] + lc.SendA[1]
-			a := t * math.Pi * 10 * lc.SendA[2]
-			x := width/2 + math.Cos(a)*d
-			y := height/2 + math.Sin(a)*d
-			r := t * lc.SendA[3] * 8
-			dc.DrawCircle(x, y, r)
-		}
-		dc.Fill()
+		dc.SetRGB(lc.Slide[0], lc.Slide[1], lc.Slide[2])
+
+		// for i := 0; i <= N; i++ {
+		// 	t := float64(i) / N
+		// 	d := t*S*10*lc.SendA[0] + lc.SendA[1]
+		// 	a := t * math.Pi * 10 * lc.SendA[2]
+		// 	x := width/2 + math.Cos(a)*d
+		// 	y := height/2 + math.Sin(a)*d
+		// 	r := t * lc.SendA[3] * 8
+		// 	dc.DrawCircle(x, y, r)
+		// }
+		// dc.Fill()
+
+		dc.DrawStringAnchored(render, offset, S/2, 0, 0.5)
 
 		for x := 0; x < width; x++ {
 			for y := 0; y < height; y++ {
@@ -510,6 +630,7 @@ func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
 				}
 			}
 		}
+
 		sender.send()
 		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
 	}

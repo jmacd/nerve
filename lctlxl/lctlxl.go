@@ -62,10 +62,10 @@ func Open() (*LaunchControl, error) {
 		ferr: make(chan error),
 	}
 	for i := 0; i < 8; i++ {
-		lc.SendA[i] = 1
-		lc.SendB[i] = 1
-		lc.SendC[i] = 1
-		lc.Slide[i] = 1
+		lc.SendA[i] = 0.5
+		lc.SendB[i] = 0.5
+		lc.SendC[i] = 0.5
+		lc.Slide[i] = 0.5
 	}
 
 	var ctx libusb.Context
@@ -244,15 +244,24 @@ func (lc *LaunchControl) setupMidi() {
 				return
 			}
 
+			fv := 0.0
+			if value == 64 {
+				fv = 0.5
+			} else if value < 64 {
+				fv = float64(value) / 64.0
+			} else {
+				fv = float64(value) / 127.0
+			}
+
 			switch {
 			case controller >= 13 && controller <= 20:
-				lc.SendA[controller-13] = float64(value) / 127
+				lc.SendA[controller-13] = fv
 			case controller >= 29 && controller <= 36:
-				lc.SendB[controller-29] = float64(value) / 127
+				lc.SendB[controller-29] = fv
 			case controller >= 49 && controller <= 56:
-				lc.SendC[controller-49] = float64(value) / 127
+				lc.SendC[controller-49] = fv
 			case controller >= 77 && controller <= 84:
-				lc.Slide[controller-77] = float64(value) / 127
+				lc.Slide[controller-77] = fv
 			}
 		}
 

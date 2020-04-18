@@ -15,7 +15,8 @@ import (
 	"github.com/fogleman/gg"
 	"github.com/hsluv/hsluv-go"
 	"github.com/jkl1337/go-chromath"
-	"github.com/jmacd/nerve/lctlxl"
+	"github.com/jmacd/launchmidi/launchctl/xl"
+
 	"github.com/jsimonetti/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
 
@@ -88,22 +89,21 @@ func telemetry() func() {
 
 func main() {
 	var sender *Sender
-	var lc *lctlxl.LaunchControl
 
 	// stop := telemetry()
 	// defer stop()
 
 	sender = newSender()
 
-	lc, err := lctlxl.Open()
+	l, err := xl.Open()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("error while openning connection to launchctl: %v", err)
 	}
-	defer lc.Stop()
+	defer l.Close()
 
-	lc.Start()
+	go l.Run(context.Background())
 
-	scroller(sender, lc)
+	scroller(sender, l)
 }
 
 func factors(n int) []int {
@@ -119,7 +119,7 @@ func factors(n int) []int {
 	return fs
 }
 
-func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
+func tilesnake(sender *Sender, lc *xl.LaunchControl) {
 	wf := factors(width)
 	hf := factors(height)
 
@@ -152,9 +152,9 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 		delta := now.Sub(last)
 		last = now
 
-		elapsed += 50 * lc.SendA[0] * float64(delta) / float64(time.Second)
+		elapsed += 50 * lc.Get(xl.ControlKnobSendA[0]) * float64(delta) / float64(time.Second)
 
-		wX, wY, wZ := colorful.XyyToXyz(setX+(lc.SendA[2]-0.5)/10, setY+(lc.SendA[3]-0.5)/10, 1)
+		wX, wY, wZ := colorful.XyyToXyz(setX+(lc.Get(xl.ControlKnobSendA[2])-0.5)/10, setY+(lc.Get(xl.ControlKnobSendA[3])-0.5)/10, 1)
 
 		targetIlluminant := &chromath.IlluminantRef{
 			XYZ:      chromath.XYZ{wX, wY, wZ},
@@ -183,7 +183,7 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 				cangle := ((float64(cidx) + elapsed) / float64(cnt))
 				cangle -= float64(int64(cangle))
 
-				r, g, b := hsluv.HsluvToRGB(360*cangle, 100*lc.Slide[1], 100*lc.Slide[2])
+				r, g, b := hsluv.HsluvToRGB(360*cangle, 100*lc.Get(xl.ControlSlider[1]), 100*lc.Get(xl.ControlSlider[2]))
 				c0 := Color{R: r, G: g, B: b}
 
 				cxyz := rgb2xyz.Convert(chromath.RGB{c0.R, c0.G, c0.B})
@@ -207,15 +207,15 @@ func tilesnake(sender *Sender, lc *lctlxl.LaunchControl) {
 		// })
 
 		sender.send()
-		time.Sleep(time.Duration(float64(5*time.Millisecond) * lc.SendA[1]))
+		time.Sleep(time.Duration(float64(5*time.Millisecond) * lc.Get(xl.ControlKnobSendA[1])))
 	}
 }
 
-func luv(sender *Sender, lc *lctlxl.LaunchControl) {
+func luv(sender *Sender, lc *xl.LaunchControl) {
 	for {
-		level := lc.SendA[0]
+		level := lc.Get(xl.ControlKnobSendA[0])
 
-		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[1], 0.5*lc.SendA[2], 1)
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.Get(xl.ControlKnobSendA[1]), 0.5*lc.Get(xl.ControlKnobSendA[2]), 1)
 		wref := [3]float64{wX, wY, wZ}
 
 		for y := 0; y < height; y++ {
@@ -239,11 +239,11 @@ func luv(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func hcl(sender *Sender, lc *lctlxl.LaunchControl) {
+func hcl(sender *Sender, lc *xl.LaunchControl) {
 	for {
-		level := lc.SendA[0]
+		level := lc.Get(xl.ControlKnobSendA[0])
 
-		wref := [3]float64{0.5 + lc.SendA[1], 1.00000, 0.5 + lc.SendA[2]}
+		wref := [3]float64{0.5 + lc.Get(xl.ControlKnobSendA[1]), 1.00000, 0.5 + lc.Get(xl.ControlKnobSendA[2])}
 
 		for y := 0; y < height; y++ {
 			for x := 0; x < width; x++ {
@@ -266,11 +266,11 @@ func hcl(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func lab(sender *Sender, lc *lctlxl.LaunchControl) {
+func lab(sender *Sender, lc *xl.LaunchControl) {
 	for {
-		level := lc.SendA[0]
+		level := lc.Get(xl.ControlKnobSendA[0])
 
-		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[1], 0.5*lc.SendA[2], 1)
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.Get(xl.ControlKnobSendA[1]), 0.5*lc.Get(xl.ControlKnobSendA[2]), 1)
 		wref := [3]float64{wX, wY, wZ}
 
 		for y := 0; y < height; y++ {
@@ -294,12 +294,12 @@ func lab(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func showHsluv(sender *Sender, lc *lctlxl.LaunchControl) {
+func showHsluv(sender *Sender, lc *xl.LaunchControl) {
 	for frame := 0; ; frame++ {
-		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.SendA[0], 0.5*lc.SendA[1], 1)
+		wX, wY, wZ := colorful.XyyToXyz(0.5*lc.Get(xl.ControlKnobSendA[0]), 0.5*lc.Get(xl.ControlKnobSendA[1]), 1)
 		wref := [3]float64{wX, wY, wZ}
 
-		r, g, b := hsluv.HsluvToRGB(360*lc.Slide[0], 100*lc.Slide[1], 100*lc.Slide[2])
+		r, g, b := hsluv.HsluvToRGB(360*lc.Get(xl.ControlSlider[0]), 100*lc.Get(xl.ControlSlider[1]), 100*lc.Get(xl.ControlSlider[2]))
 		c := Color{R: r, G: g, B: b}
 		//fmt.Println("COLOR IN", c, wref)
 		x1, y1, z1 := c.Xyz()
@@ -320,9 +320,9 @@ func showHsluv(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func gamma(sender *Sender, lc *lctlxl.LaunchControl) {
+func gamma(sender *Sender, lc *xl.LaunchControl) {
 	for frame := 0; ; frame++ {
-		gamma := math.Max(lc.SendA[0]*3, 0.001)
+		gamma := math.Max(lc.Get(xl.ControlKnobSendA[0])*3, 0.001)
 		//gamma = 1.0
 
 		for x := 0; x < width; x++ {
@@ -340,7 +340,7 @@ func gamma(sender *Sender, lc *lctlxl.LaunchControl) {
 	}
 }
 
-func walk(sender *Sender, lc *lctlxl.LaunchControl) {
+func walk(sender *Sender, lc *xl.LaunchControl) {
 	last := time.Now()
 	elapsed := 0.0
 
@@ -350,49 +350,49 @@ func walk(sender *Sender, lc *lctlxl.LaunchControl) {
 
 		last = now
 
-		rate := 100 * lc.SendA[0]
+		rate := 100 * lc.Get(xl.ControlKnobSendA[0])
 
 		elapsed += rate * float64(delta.Seconds())
 
 		spot := int64(elapsed) % pixels
 		sender.Buffer[spot] = Color{
-			R: lc.Slide[0] * lc.SendA[1],
-			G: lc.Slide[1] * lc.SendA[1],
-			B: lc.Slide[2] * lc.SendA[1],
+			R: lc.Get(xl.ControlSlider[0]) * lc.Get(xl.ControlKnobSendA[1]),
+			G: lc.Get(xl.ControlSlider[1]) * lc.Get(xl.ControlKnobSendA[1]),
+			B: lc.Get(xl.ControlSlider[2]) * lc.Get(xl.ControlKnobSendA[1]),
 		}
 
 		sender.send()
-		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
+		time.Sleep(time.Duration(250*lc.Get(xl.ControlKnobSendA[0])) * time.Millisecond)
 	}
 }
 
-func strobe2(sender *Sender, lc *lctlxl.LaunchControl) {
+func strobe2(sender *Sender, lc *xl.LaunchControl) {
 	for frame := 0; ; frame++ {
 
 		if frame%2 == 0 {
 			for i := 0; i < pixels; i++ {
 				sender.Buffer[i] = Color{
-					R: lc.Slide[3] * lc.SendA[1],
-					G: lc.Slide[4] * lc.SendA[1],
-					B: lc.Slide[5] * lc.SendA[1],
+					R: lc.Get(xl.ControlSlider[3]) * lc.Get(xl.ControlKnobSendA[1]),
+					G: lc.Get(xl.ControlSlider[4]) * lc.Get(xl.ControlKnobSendA[1]),
+					B: lc.Get(xl.ControlSlider[5]) * lc.Get(xl.ControlKnobSendA[1]),
 				}
 			}
 		} else {
 			for i := 0; i < pixels; i++ {
 				sender.Buffer[i] = Color{
-					R: lc.Slide[0] * lc.SendA[1],
-					G: lc.Slide[1] * lc.SendA[1],
-					B: lc.Slide[2] * lc.SendA[1],
+					R: lc.Get(xl.ControlSlider[0]) * lc.Get(xl.ControlKnobSendA[1]),
+					G: lc.Get(xl.ControlSlider[1]) * lc.Get(xl.ControlKnobSendA[1]),
+					B: lc.Get(xl.ControlSlider[2]) * lc.Get(xl.ControlKnobSendA[1]),
 				}
 			}
 		}
 
 		sender.send()
-		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
+		time.Sleep(time.Duration(250*lc.Get(xl.ControlKnobSendA[0])) * time.Millisecond)
 	}
 }
 
-func colors(sender *Sender, lc *lctlxl.LaunchControl) {
+func colors(sender *Sender, lc *xl.LaunchControl) {
 	start := time.Now()
 
 	for {
@@ -401,7 +401,7 @@ func colors(sender *Sender, lc *lctlxl.LaunchControl) {
 		pattern := (seconds / 15) % 4
 
 		for twoCount := 0.0; twoCount < 2; twoCount += 0.005 {
-			level := lc.SendA[0]
+			level := lc.Get(xl.ControlKnobSendA[0])
 
 			for y := 0; y < height; y++ {
 				for x := 0; x < width; x++ {
@@ -534,7 +534,7 @@ func prepareString(dc *gg.Context, orig string) (render string, frags []scrollFr
 	return
 }
 
-func scroller(sender *Sender, lc *lctlxl.LaunchControl) {
+func scroller(sender *Sender, lc *xl.LaunchControl) {
 	img := image.NewRGBA(image.Rectangle{
 		Min: image.Point{0, 0},
 		Max: image.Point{width, height},
@@ -583,7 +583,7 @@ Meeeee!
 	currentFontSize := 0.0
 
 	for {
-		fontSize := 6 + lc.SendA[6]*20
+		fontSize := 6 + lc.Get(xl.ControlKnobSendA[6])*20
 
 		if currentFontSize != fontSize {
 			if err := dc.LoadFontFace("/System/Library/Fonts/Avenir.ttc", fontSize); err != nil {
@@ -592,8 +592,8 @@ Meeeee!
 			currentFontSize = fontSize
 		}
 
-		rate := (lc.SendA[7] - 0.5) * 200
-		fmt.Println("RATE", rate, lc.SendA[7], lc.SendA[7]-0.5)
+		rate := (lc.Get(xl.ControlKnobSendA[7]) - 0.5) * 200
+		// fmt.Println("RATE", rate, lc.Get(xl.ControlKnobSendA[7]), lc.Get(xl.ControlKnobSendA[7])-0.5)
 
 		now := time.Now()
 		delta := now.Sub(lastTime).Seconds()
@@ -602,17 +602,17 @@ Meeeee!
 
 		// fmt.Println("OFFSET", offset)
 
-		dc.SetRGB(lc.Slide[5], lc.Slide[6], lc.Slide[7])
+		dc.SetRGB(lc.Get(xl.ControlSlider[5]), lc.Get(xl.ControlSlider[6]), lc.Get(xl.ControlSlider[7]))
 		dc.Clear()
-		dc.SetRGB(lc.Slide[0], lc.Slide[1], lc.Slide[2])
+		dc.SetRGB(lc.Get(xl.ControlSlider[0]), lc.Get(xl.ControlSlider[1]), lc.Get(xl.ControlSlider[2]))
 
 		// for i := 0; i <= N; i++ {
 		// 	t := float64(i) / N
-		// 	d := t*S*10*lc.SendA[0] + lc.SendA[1]
-		// 	a := t * math.Pi * 10 * lc.SendA[2]
+		// 	d := t*S*10*lc.Get(xl.ControlKnobSendA[0]) + lc.Get(xl.ControlKnobSendA[1])
+		// 	a := t * math.Pi * 10 * lc.Get(xl.ControlKnobSendA[2])
 		// 	x := width/2 + math.Cos(a)*d
 		// 	y := height/2 + math.Sin(a)*d
-		// 	r := t * lc.SendA[3] * 8
+		// 	r := t * lc.Get(xl.ControlKnobSendA[3]) * 8
 		// 	dc.DrawCircle(x, y, r)
 		// }
 		// dc.Fill()
@@ -632,6 +632,6 @@ Meeeee!
 		}
 
 		sender.send()
-		time.Sleep(time.Duration(250*lc.SendA[0]) * time.Millisecond)
+		time.Sleep(time.Duration(250*lc.Get(xl.ControlKnobSendA[0])) * time.Millisecond)
 	}
 }

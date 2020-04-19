@@ -14,6 +14,7 @@ import (
 	"github.com/jkl1337/go-chromath"
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/artnet"
+	"github.com/jmacd/nerve/program"
 
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -66,6 +67,17 @@ func factors(n int) []int {
 }
 
 func tilesnake(sender *artnet.Sender, lc *xl.LaunchControl) {
+	prog := program.NewProgram("tilesnake", lc)
+	prog.AddControl(xl.ControlKnobSendA[0], xl.ColorBrightGreen)
+	prog.AddControl(xl.ControlKnobSendA[1], xl.ColorBrightGreen)
+	prog.AddControl(xl.ControlKnobSendA[2], xl.ColorBrightOrange)
+	prog.AddControl(xl.ControlKnobSendA[3], xl.ColorBrightOrange)
+
+	prog.AddControl(xl.ControlSlider[0], 0)
+	prog.AddControl(xl.ControlSlider[1], 0)
+
+	lc.SwapBuffers(0)
+
 	buffer := Buffer{}
 	wf := factors(width)
 	hf := factors(height)

@@ -2,7 +2,9 @@ package artnet
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"time"
 
 	"github.com/jmacd/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
@@ -14,8 +16,13 @@ const (
 
 type (
 	Sender struct {
+		destStr string
+		srcStr  string
+
 		dest *net.UDPAddr
 		conn *net.UDPConn
+
+		lastLog time.Time
 
 		packet.ArtDMXPacket
 	}
@@ -24,24 +31,39 @@ type (
 )
 
 func NewSender(ipAddr string) *Sender {
-	dst := fmt.Sprintf("%s:%d", ipAddr, packet.ArtNetPort)
-	node, _ := net.ResolveUDPAddr("udp", dst)
-
-	src := fmt.Sprintf("%s:%d", "", packet.ArtNetPort)
-	localAddr, _ := net.ResolveUDPAddr("udp", src)
-
-	conn, err := net.ListenUDP("udp", localAddr)
-	if err != nil {
-		panic(fmt.Sprint("error opening udp: ", err))
-	}
-
 	return &Sender{
-		dest: node,
-		conn: conn,
+		destStr: fmt.Sprintf("%s:%d", ipAddr, packet.ArtNetPort),
+		srcStr:  fmt.Sprintf("%s:%d", "", packet.ArtNetPort),
 	}
 }
 
-func (s *Sender) Send(buffer []Color) {
+func (s *Sender) Send(buffer []Color) error {
+	err := s.send(buffer)
+	if err != nil {
+		now := time.Now()
+		if now.Sub(s.lastLog) >= time.Second {
+			log.Printf("send: %v\n", err)
+			s.lastLog = now
+		}
+	}
+	return err
+}
+
+func (s *Sender) send(buffer []Color) error {
+	if s.conn == nil {
+		node, err := net.ResolveUDPAddr("udp", s.destStr)
+		if err != nil {
+			return fmt.Errorf("error resolving local udp: %v", err)
+		}
+		localAddr, _ := net.ResolveUDPAddr("udp", s.srcStr)
+		conn, err := net.ListenUDP("udp", localAddr)
+		if err != nil {
+			return fmt.Errorf("error resolving artnet udp: %v", err)
+		}
+		s.dest = node
+		s.conn = conn
+	}
+
 	data := s.ArtDMXPacket.Data[:]
 	s.ArtDMXPacket.SubUni = 0
 	pixels := len(buffer)
@@ -64,10 +86,14 @@ func (s *Sender) Send(buffer []Color) {
 
 		_, err := s.conn.WriteTo(b, s.dest)
 		if err != nil {
-			panic(fmt.Sprint("error writing packet: ", err))
+			s.conn.Close()
+			s.conn = nil
+			s.dest = nil
+			return fmt.Errorf("error writing packet: %v", err)
 		}
 
 		s.ArtDMXPacket.SubUni++
 		p += num
 	}
+	return nil
 }

@@ -20,14 +20,13 @@ import (
 )
 
 const (
-	ipAddr = "192.168.0.50"
+	ipAddr = "192.168.0.26"
 
 	width  = 20
 	height = 15
 	pixels = width * height
 
-	zeroOffset = 0
-	epsilon    = 0.00001
+	epsilon = 0.00001
 )
 
 type (

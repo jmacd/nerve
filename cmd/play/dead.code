@@ -1,4 +1,60 @@
 
+// type scrollFrag struct {
+// 	pixWidth  float64
+// 	pixOffset float64
+// 	chars     string
+// }
+
+// func prepareString(dc *gg.Context, orig string) (render string, frags []scrollFrag) {
+// 	var sb strings.Builder
+
+// 	for len(orig) != 0 {
+// 		r, size := utf8.DecodeRuneInString(orig)
+// 		if unicode.IsSpace(r) {
+// 			sb.WriteRune(' ')
+// 		} else {
+// 			sb.WriteRune(r)
+// 		}
+// 		orig = orig[size:]
+// 	}
+
+// 	orig = sb.String()
+// 	render = orig
+// 	offset := 0.0
+
+// 	for len(orig) > 0 {
+// 		prefixSize := 0
+// 		leadingWidth := 0.0
+
+// 		for {
+// 			_, size := utf8.DecodeRuneInString(orig)
+// 			prefixSize += size
+
+// 			allWidth, _ := dc.MeasureString(orig)
+// 			leadingWidth, _ = dc.MeasureString(orig[0:prefixSize])
+// 			trailingWidth, _ := dc.MeasureString(orig[prefixSize:])
+
+// 			if math.Abs(leadingWidth+trailingWidth-allWidth) >= epsilon {
+// 				continue
+// 			}
+
+// 			break
+// 		}
+
+// 		frags = append(frags, scrollFrag{
+// 			pixOffset: offset,
+// 			pixWidth:  leadingWidth,
+// 			chars:     orig[0:prefixSize],
+// 		})
+
+// 		offset += leadingWidth
+
+// 		orig = orig[prefixSize:]
+// 	}
+
+// 	return
+// }
+
 func telemetry() func() {
 	controller, err := stdout.NewExportPipeline(stdout.Config{}, time.Second*1)
 	if err != nil {

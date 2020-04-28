@@ -1,27 +1,52 @@
 package program
 
-import "github.com/jmacd/launchmidi/launchctl/xl"
+import (
+	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/nerve/artnet"
+	"github.com/lucasb-eyer/go-colorful"
+)
 
 type (
-	Program struct {
-		name     string
-		lc       *xl.LaunchControl
-		controls []Control
+	Color = colorful.Color
+
+	Buffer struct {
+		Width  int
+		Height int
+		Pixels []Color
 	}
 
-	Control struct {
-		device xl.Control
+	Controls struct {
+		params []Parameter
+	}
+
+	Parameter struct {
+		control xl.Control
+		color   xl.Color
+	}
+
+	Player interface {
+		Sender() *artnet.Sender
+		Controller() *xl.LaunchControl
+	}
+
+	Runner interface {
+		Apply(Player)
+		Draw(Player) error
 	}
 )
 
-func NewProgram(name string, lc *xl.LaunchControl) *Program {
-	return &Program{
-		name: name,
-		lc:   lc,
-	}
+func (p *Controls) AddParameter(control xl.Control, color xl.Color) {
+	p.params = append(p.params, Parameter{
+		control: control,
+		color:   color,
+	})
 }
 
-func (p *Program) AddControl(control xl.Control, color xl.Color) {
-	p.controls = append(p.controls, Control{control})
-	p.lc.SetColor(0, control, xl.FlashUnknown(color))
+func (p *Controls) Apply(player Player) {
+	lc := player.Controller()
+	lc.Clear(0)
+	for _, p := range p.params {
+		lc.SetColor(0, p.control, xl.FlashUnknown(p.color))
+	}
+	lc.SwapBuffers(0)
 }

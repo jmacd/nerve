@@ -9,6 +9,7 @@ import (
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/artnet"
 	"github.com/jmacd/nerve/program"
+	"github.com/jmacd/nerve/program/strobe2"
 	"github.com/jmacd/nerve/program/tilesnake"
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -25,8 +26,6 @@ const (
 
 type (
 	Color = colorful.Color
-
-	Buffer [pixels]colorful.Color
 )
 
 func main() {
@@ -63,6 +62,7 @@ type PlayProgram struct {
 func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
 	// @@@
 	snake := tilesnake.New(width, height)
+	strobe := strobe2.New(width, height)
 
 	return &PlayProgram{
 		sender:  sender,
@@ -70,13 +70,13 @@ func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
 		current: -1,
 		programs: [...]program.Runner{
 			snake,
+			strobe,
 			snake,
+			strobe,
 			snake,
+			strobe,
 			snake,
-			snake,
-			snake,
-			snake,
-			snake,
+			strobe,
 		},
 	}
 }
@@ -92,6 +92,8 @@ func (bp *PlayProgram) Run(ctx context.Context) {
 
 	bp.setButtonColors()
 
+	buffer := &program.Buffer{}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -101,6 +103,8 @@ func (bp *PlayProgram) Run(ctx context.Context) {
 
 		if bp.current >= 0 {
 			bp.programs[bp.current].Draw(bp)
+			bp.programs[bp.current].CopyTo(buffer)
+			bp.sender.Send(buffer.Pixels[:])
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

@@ -1,3 +1,7 @@
+	// Haha
+	// rand.Shuffle(pixels, func(i, j int) {
+	// 	sender.Buffer[i], sender.Buffer[j] = sender.Buffer[j], sender.Buffer[i]
+	// })
 
 // type scrollFrag struct {
 // 	pixWidth  float64

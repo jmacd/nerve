@@ -12,9 +12,8 @@ import (
 )
 
 type Tilesnake struct {
-	program.Controls
+	program.Pattern
 
-	buffer   program.Buffer
 	patternW int
 	patternH int
 	sections int
@@ -28,7 +27,9 @@ type Tilesnake struct {
 }
 
 func New(width, height int) *Tilesnake {
-	snake := &Tilesnake{}
+	snake := &Tilesnake{
+		Pattern: program.New(width, height),
+	}
 
 	snake.AddParameter(xl.ControlKnobSendA[0], xl.ColorBrightGreen)
 	snake.AddParameter(xl.ControlKnobSendA[1], xl.ColorBrightGreen)
@@ -38,11 +39,6 @@ func New(width, height int) *Tilesnake {
 	snake.AddParameter(xl.ControlSlider[0], 0)
 	snake.AddParameter(xl.ControlSlider[1], 0)
 
-	snake.buffer = program.Buffer{
-		Width:  width,
-		Height: height,
-		Pixels: make([]program.Color, width*height),
-	}
 	wf := factors(width)
 	hf := factors(height)
 
@@ -85,9 +81,8 @@ func factors(n int) []int {
 	return fs
 }
 
-func (snake *Tilesnake) Draw(player program.Player) error {
+func (snake *Tilesnake) Draw(player program.Player) {
 	lc := player.Controller()
-	sender := player.Sender()
 
 	now := time.Now()
 	delta := now.Sub(snake.last)
@@ -134,19 +129,10 @@ func (snake *Tilesnake) Draw(player program.Player) error {
 
 			for x := 0; x < snake.tw; x++ {
 				for y := 0; y < snake.th; y++ {
-					idx := (j*snake.th+y)*snake.buffer.Width + (i*snake.tw + x)
-					snake.buffer.Pixels[idx] = c1
+					idx := (j*snake.th+y)*snake.Buffer.Width + (i*snake.tw + x)
+					snake.Buffer.Pixels[idx] = c1
 				}
 			}
 		}
 	}
-
-	// Haha
-	// rand.Shuffle(pixels, func(i, j int) {
-	// 	sender.Buffer[i], sender.Buffer[j] = sender.Buffer[j], sender.Buffer[i]
-	// })
-
-	sender.Send(snake.buffer.Pixels[:])
-
-	return nil
 }

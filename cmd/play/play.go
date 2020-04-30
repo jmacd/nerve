@@ -9,7 +9,8 @@ import (
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/artnet"
 	"github.com/jmacd/nerve/program"
-	"github.com/jmacd/nerve/program/strobe2"
+	"github.com/jmacd/nerve/program/colors"
+	"github.com/jmacd/nerve/program/strobe"
 	"github.com/jmacd/nerve/program/tilesnake"
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -62,7 +63,8 @@ type PlayProgram struct {
 func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
 	// @@@
 	snake := tilesnake.New(width, height)
-	strobe := strobe2.New(width, height)
+	strobe := strobe.New(width, height)
+	colors := colors.New(width, height)
 
 	return &PlayProgram{
 		sender:  sender,
@@ -71,10 +73,10 @@ func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
 		programs: [...]program.Runner{
 			snake,
 			strobe,
+			colors,
 			snake,
 			strobe,
-			snake,
-			strobe,
+			colors,
 			snake,
 			strobe,
 		},
@@ -86,7 +88,12 @@ func (bp *PlayProgram) Run(ctx context.Context) {
 		bp.lc.AddCallback(
 			0,
 			xl.ControlButtonTrackFocus[i],
-			bp.topButton,
+			bp.selectFeature,
+		)
+		bp.lc.AddCallback(
+			0,
+			xl.ControlButtonTrackControl[i],
+			bp.selectProgram,
 		)
 	}
 
@@ -119,23 +126,38 @@ func (bp *PlayProgram) setButtonColors() {
 			c = xl.FourDimColors[i%4]
 		}
 		bp.lc.SetColor(0,
+			xl.ControlButtonTrackControl[i],
+			c,
+		)
+		bp.lc.SetColor(0,
 			xl.ControlButtonTrackFocus[i],
 			c,
 		)
 	}
 }
 
-func (bp *PlayProgram) topButton(_ int, control xl.Control, value xl.Value) {
+func (bp *PlayProgram) selectFeature(_ int, control xl.Control, value xl.Value) {
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
 	defer bp.lc.SwapBuffers(0)
 
-	idx := int(control - xl.ControlButtonTrackFocus[0])
+	feature := int(control - xl.ControlButtonTrackFocus[0])
+	if bp.current >= 0 {
+		bp.programs[bp.current].SetFeature(feature)
+	}
+}
+
+func (bp *PlayProgram) selectProgram(_ int, control xl.Control, value xl.Value) {
+	bp.lock.Lock()
+	defer bp.lock.Unlock()
+	defer bp.lc.SwapBuffers(0)
+
+	idx := int(control - xl.ControlButtonTrackControl[0])
 
 	// Turn the LED off while while held down.
 	if value == 127 {
 		bp.lc.SetColor(0,
-			xl.ControlButtonTrackFocus[idx],
+			xl.ControlButtonTrackControl[idx],
 			0,
 		)
 		return

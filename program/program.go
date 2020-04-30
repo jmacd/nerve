@@ -21,6 +21,8 @@ type (
 	Pattern struct {
 		Controls
 		Buffer
+
+		Feature int
 	}
 
 	Parameter struct {
@@ -35,6 +37,7 @@ type (
 	Runner interface {
 		Apply(Player)
 		Draw(Player)
+		SetFeature(int) // 0-7
 		CopyTo(*Buffer)
 	}
 )
@@ -75,4 +78,8 @@ func (p *Pattern) CopyTo(buffer *Buffer) {
 	*buffer = p.Buffer
 	buffer.Pixels = make([]Color, len(p.Buffer.Pixels))
 	copy(buffer.Pixels, p.Buffer.Pixels)
+}
+
+func (p *Pattern) SetFeature(feature int) {
+	p.Feature = feature
 }

@@ -142,6 +142,17 @@ func (bp *PlayProgram) selectFeature(_ int, control xl.Control, value xl.Value) 
 	defer bp.lc.SwapBuffers(0)
 
 	feature := int(control - xl.ControlButtonTrackFocus[0])
+
+	if value == 0 {
+		bp.setButtonColors()
+		return
+	}
+
+	// Turn the LED off while while held down.
+	bp.lc.SetColor(0,
+		xl.ControlButtonTrackFocus[feature],
+		0,
+	)
 	if bp.current >= 0 {
 		bp.programs[bp.current].SetFeature(feature)
 	}

@@ -5,12 +5,12 @@ import (
 	"io"
 	"log"
 
-	"github.com/jmacd/nerve/lctlxl"
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"gitlab.com/gomidi/midi/mid"
 )
 
 func main() {
-	lc, err := lctlxl.Open()
+	lc, err := xl.Open()
 	if err != nil {
 		log.Fatal(err)
 	}

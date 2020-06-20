@@ -1,10 +1,13 @@
 package artnet
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/jmacd/go-artnet/packet"
 	"github.com/lucasb-eyer/go-colorful"
@@ -22,6 +25,8 @@ type (
 		dest *net.UDPAddr
 		conn *net.UDPConn
 
+		inputCh chan []Color
+
 		lastLog time.Time
 
 		packet.ArtDMXPacket
@@ -34,36 +39,63 @@ func NewSender(ipAddr string) *Sender {
 	return &Sender{
 		destStr: fmt.Sprintf("%s:%d", ipAddr, packet.ArtNetPort),
 		srcStr:  fmt.Sprintf("%s:%d", "", packet.ArtNetPort),
+		inputCh: make(chan []Color),
 	}
 }
 
-func (s *Sender) Send(buffer []Color) error {
-	err := s.send(buffer)
-	if err != nil {
-		now := time.Now()
-		if now.Sub(s.lastLog) >= time.Second {
-			log.Printf("send: %v\n", err)
-			s.lastLog = now
-		}
+func (s *Sender) Send(buffer []Color) {
+	s.inputCh <- buffer
+}
+
+func (s *Sender) Run(ctx context.Context) error {
+	grp, ctx := errgroup.WithContext(ctx)
+
+	if err := s.reconnect(); err != nil {
+		log.Println("artnet sender:", err)
 	}
-	return err
+
+	grp.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case buffer := <-s.inputCh:
+				var err error
+				if s.conn == nil {
+					err = s.reconnect()
+				}
+				if err == nil {
+					err = s.send(buffer)
+				}
+				if err != nil {
+					now := time.Now()
+					if now.Sub(s.lastLog) >= time.Second {
+						log.Printf("send: %v\n", err)
+						s.lastLog = now
+					}
+				}
+			}
+		}
+	})
+	return grp.Wait()
+}
+
+func (s *Sender) reconnect() error {
+	node, err := net.ResolveUDPAddr("udp", s.destStr)
+	if err != nil {
+		return fmt.Errorf("error resolving local udp: %v", err)
+	}
+	localAddr, _ := net.ResolveUDPAddr("udp", s.srcStr)
+	conn, err := net.ListenUDP("udp", localAddr)
+	if err != nil {
+		return fmt.Errorf("error resolving artnet udp: %v", err)
+	}
+	s.dest = node
+	s.conn = conn
+	return nil
 }
 
 func (s *Sender) send(buffer []Color) error {
-	if s.conn == nil {
-		node, err := net.ResolveUDPAddr("udp", s.destStr)
-		if err != nil {
-			return fmt.Errorf("error resolving local udp: %v", err)
-		}
-		localAddr, _ := net.ResolveUDPAddr("udp", s.srcStr)
-		conn, err := net.ListenUDP("udp", localAddr)
-		if err != nil {
-			return fmt.Errorf("error resolving artnet udp: %v", err)
-		}
-		s.dest = node
-		s.conn = conn
-	}
-
 	data := s.ArtDMXPacket.Data[:]
 	s.ArtDMXPacket.SubUni = 0
 	pixels := len(buffer)

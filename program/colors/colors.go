@@ -58,6 +58,8 @@ func (s *Colors) Draw(player program.Player) {
 	}
 }
 
+// TODO factor this
+
 func (s *Colors) hsvStripe(lc *xl.LaunchControl, wref [3]float64) {
 	tplus := 360 * lc.Get(xl.ControlSlider[5])
 	for x := 0; x < s.Width; x++ {

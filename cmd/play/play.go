@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	_ "image"
 	"log"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/artnet"
@@ -15,8 +18,19 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 )
 
+// TODOs
+// Buffer mgmt
+// pool := &sync.Pool{
+// 	New: func() interface{} {
+// 		return new(Buffer)
+// 	},
+// }
+// zbuf := pool.Get()
+// defer pool.Put(zbuf)
+//
+
 const (
-	ipAddr = "192.168.0.23"
+	ipAddr = "192.168.0.25"
 
 	width  = 20
 	height = 15
@@ -27,10 +41,27 @@ const (
 
 type (
 	Color = colorful.Color
+
+	Buffer struct {
+		Pixels []Color
+	}
 )
 
 func main() {
 	sender := artnet.NewSender(ipAddr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	grp, ctx := errgroup.WithContext(ctx)
+
+	grp.Go(func() error {
+		err := sender.Run(ctx)
+		if err != nil {
+			log.Println("artnet sender:", err)
+		}
+		return err
+	})
 
 	l, err := xl.Open()
 	if err != nil {
@@ -38,14 +69,14 @@ func main() {
 	}
 	defer l.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go l.Run(ctx)
+	go func() {
+		err := l.Run(ctx)
+		if err != nil {
+			log.Println("launch control XL:", err)
+		}
+	}()
 
 	bp := newPlayProgram(sender, l)
-
-	sender.Send(make([]Color, pixels))
 
 	go bp.Run(ctx)
 	select {}
@@ -61,15 +92,17 @@ type PlayProgram struct {
 }
 
 func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
-	// @@@
+	// The set of patterns
 	snake := tilesnake.New(width, height)
 	strobe := strobe.New(width, height)
 	colors := colors.New(width, height)
 
+	sender.Send(make([]Color, pixels))
+
 	return &PlayProgram{
 		sender:  sender,
 		lc:      lc,
-		current: -1,
+		current: 0,
 		programs: [...]program.Runner{
 			snake,
 			strobe,
@@ -108,11 +141,12 @@ func (bp *PlayProgram) Run(ctx context.Context) {
 		default:
 		}
 
-		if bp.current >= 0 {
-			bp.programs[bp.current].Draw(bp)
-			bp.programs[bp.current].CopyTo(buffer)
-			bp.sender.Send(buffer.Pixels[:])
-		}
+		// @@@ now := time.Now()
+
+		bp.programs[bp.current].Draw(bp)
+		bp.programs[bp.current].CopyTo(buffer)
+		bp.sender.Send(buffer.Pixels[:])
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	_ "image"
 	"log"
+	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/artnet"
@@ -15,7 +16,10 @@ import (
 	"github.com/jmacd/nerve/program/colors"
 	"github.com/jmacd/nerve/program/strobe"
 	"github.com/jmacd/nerve/program/tilesnake"
+	"github.com/jmacd/nerve/video"
 	"github.com/lucasb-eyer/go-colorful"
+
+	"github.com/faiface/pixel/pixelgl"
 )
 
 // TODOs
@@ -30,13 +34,9 @@ import (
 //
 
 const (
-	ipAddr = "192.168.0.25"
-
 	width  = 20
 	height = 15
 	pixels = width * height
-
-	epsilon = 0.00001
 )
 
 type (
@@ -47,57 +47,89 @@ type (
 	}
 )
 
+var (
+	senderMode *string = flag.String("mode", "artnet", "e.g., argnet,video")
+	ipAddr     *string = flag.String("artnetip", "192.168.0.25", "artnet IP address")
+)
+
 func main() {
-	sender := artnet.NewSender(ipAddr)
+	flag.Parse()
+
+	pixelgl.Run(play)
+}
+
+func play() {
+	lc, err := xl.Open()
+	if err != nil {
+		log.Fatalf("error while opening connection to launchctl: %v", err)
+	}
+	defer lc.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	grp, ctx := errgroup.WithContext(ctx)
 
+	var sender Sender
+
+	switch {
+	case strings.EqualFold("artnet", *senderMode):
+		sender = artnet.NewSender(*ipAddr)
+	case strings.EqualFold("video", *senderMode):
+		sender = video.New()
+	default:
+		log.Fatalln("could not configure a sender:", *senderMode)
+	}
+
 	grp.Go(func() error {
 		err := sender.Run(ctx)
 		if err != nil {
-			log.Println("artnet sender:", err)
+			log.Println("sender:", err)
 		}
 		return err
 	})
 
-	l, err := xl.Open()
-	if err != nil {
-		log.Fatalf("error while openning connection to launchctl: %v", err)
-	}
-	defer l.Close()
-
-	go func() {
-		err := l.Run(ctx)
+	grp.Go(func() error {
+		err := lc.Run(ctx)
 		if err != nil {
 			log.Println("launch control XL:", err)
 		}
-	}()
+		return err
+	})
 
-	bp := newPlayProgram(sender, l)
+	grp.Go(func() error {
+		bp := newPlayProgram(sender, lc)
+		err := bp.Run(ctx)
+		if err != nil {
+			log.Println("play program", err)
+		}
+		return err
+	})
 
-	go bp.Run(ctx)
-	select {}
+	log.Println("play group:", grp.Wait())
+}
+
+type Sender interface {
+	Run(context.Context) error
+	Input() chan []Color
 }
 
 type PlayProgram struct {
 	lock    sync.Mutex
-	sender  *artnet.Sender
+	sender  Sender // e.g., *artnet.Sender
 	lc      *xl.LaunchControl
 	current int // Top button last pressed, [0-7].
 
 	programs [8]program.Runner
 }
 
-func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
+func newPlayProgram(sender Sender, lc *xl.LaunchControl) *PlayProgram {
 	// The set of patterns
 	snake := tilesnake.New(width, height)
 	strobe := strobe.New(width, height)
 	colors := colors.New(width, height)
 
-	sender.Send(make([]Color, pixels))
+	sender.Input() <- make([]Color, pixels)
 
 	return &PlayProgram{
 		sender:  sender,
@@ -116,7 +148,7 @@ func newPlayProgram(sender *artnet.Sender, lc *xl.LaunchControl) *PlayProgram {
 	}
 }
 
-func (bp *PlayProgram) Run(ctx context.Context) {
+func (bp *PlayProgram) Run(ctx context.Context) error {
 	for i := 0; i < 8; i++ {
 		bp.lc.AddCallback(
 			0,
@@ -137,18 +169,15 @@ func (bp *PlayProgram) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		default:
 		}
 
-		// @@@ now := time.Now()
-
 		bp.programs[bp.current].Draw(bp)
 		bp.programs[bp.current].CopyTo(buffer)
-		bp.sender.Send(buffer.Pixels[:])
-
-		time.Sleep(10 * time.Millisecond)
+		bp.sender.Input() <- buffer.Pixels[:]
 	}
+	return nil
 }
 
 func (bp *PlayProgram) setButtonColors() {
@@ -217,6 +246,6 @@ func (bp *PlayProgram) Controller() *xl.LaunchControl {
 	return bp.lc
 }
 
-func (bp *PlayProgram) Sender() *artnet.Sender {
+func (bp *PlayProgram) Sender() Sender {
 	return bp.sender
 }

@@ -43,8 +43,8 @@ func NewSender(ipAddr string) *Sender {
 	}
 }
 
-func (s *Sender) Send(buffer []Color) {
-	s.inputCh <- buffer
+func (s *Sender) Input() chan []Color {
+	return s.inputCh
 }
 
 func (s *Sender) Run(ctx context.Context) error {

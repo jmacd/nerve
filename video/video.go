@@ -6,9 +6,9 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/lucasb-eyer/go-colorful"
@@ -45,41 +45,10 @@ func (v *Video) Run(ctx context.Context) error {
 		panic(err)
 	}
 
-	win.Clear(colornames.Skyblue)
-
-	for !win.Closed() {
-		win.Update()
-	}
-	return nil
-}
-
-func loadPictureXXX(path string) (pixel.Picture, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return nil, err
-	}
-	return pixel.PictureDataFromImage(img), nil
-}
-
-func runXXX() {
-	cfg := pixelgl.WindowConfig{
-		Title:  "Nerve!",
-		Bounds: pixel.R(0, 0, 1024, 768),
-	}
-	win, err := pixelgl.NewWindow(cfg)
+	spritesheet, err := loadPictureXXX("trees.png")
 	if err != nil {
 		panic(err)
 	}
-
-	// spritesheet, err := loadPictureXXX("trees.png")
-	// if err != nil {
-	// 	panic(err)
-	// }
 
 	batch := pixel.NewBatch(&pixel.TrianglesData{}, spritesheet)
 
@@ -141,8 +110,45 @@ func runXXX() {
 		default:
 		}
 	}
+	// win.Clear(colornames.Skyblue)
+
+	// for !win.Closed() {
+	// 	win.Update()
+	// }
+	return nil
 }
 
-func mainXXX() {
-	pixelgl.Run(runXXX)
+func loadPictureXXX(path string) (pixel.Picture, error) {
+	// file, err := os.Open(path)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// defer file.Close()
+	// img, _, err := image.Decode(file)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	img := image.NewRGBA(image.Rectangle{
+		Min: image.Pt(0, 0),
+		Max: image.Pt(32, 32),
+	})
+	sigma := 1.0
+	exd := 2 * sigma * sigma
+	max := 1 / (math.Pi * exd)
+
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			x0 := float64(x - 16)
+			y0 := float64(y - 16)
+			exn := x0*x0 + y0*y0
+			exp := math.Exp(-exn / exd)
+			g := exp / (math.Pi * exd)
+			n := g / max
+
+			a := uint8(n * 255)
+			img.Set(x, y, color.RGBA{a, a, a, a})
+		}
+	}
+
+	return pixel.PictureDataFromImage(img), nil
 }

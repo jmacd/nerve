@@ -1,86 +1,61 @@
 #include <rsc_types.h>
 
-struct resource_table_hdr {
-  struct resource_table header;
+#define offsetof(st, m) \
+    ((uint32_t)&(((st *)0)->m))
 
-  uint32_t offset[3];
+struct my_resource_table {
+  struct resource_table base;
 
-  struct {
-    struct fw_rsc_hdr header;
-    struct fw_rsc_carveout carveout;
-  } carveout;
+  uint32_t offset[1]; /* Should match 'num' in actual definition */
 
-  struct {
-    struct fw_rsc_hdr header;
-    struct fw_rsc_trace trace;
-  } trace;
-
-  struct {
-    struct fw_rsc_hdr header;
-    struct fw_rsc_vdev vdev;
-    struct fw_rsc_vdev_vring vrings[2];
-    uint8_t config[0xc];
-  } vdev;
+  struct fw_rsc_carveout carveout;
 };
 
-const struct resource_table_hdr resource_table
-__attribute__((used, section (".resource_table"))) = {
-  .header = {
-    .ver = 1,
-    .num = ARRAY_SIZE(resource_table.offset), /* Number of resources */
-  },
-
-  .offset[0] = offsetof(struct resource_table_hdr, carveout),
-  .offset[1] = offsetof(struct resource_table_hdr, trace),
-  .offset[2] = offsetof(struct resource_table_hdr, vdev),
-
-  .carveout = {
-    .header = {
-      .type = RSC_CARVEOUT,
-    },
-    .carveout = {
-      .da = 0xf4000000,
-      .len = 0x2000,
-      .name = "firmware",
-    },
-  },
-
-  /* Trace resource to printf() into */
-  .trace = {
-    .header = {
-      .type = RSC_TRACE,
-    },
-    .trace = {
-      .da = (uint32_t)trace_buf,
-      .len = TRACE_BUFFER_SIZE,
-      .name = "trace",
-    },
-  },
-
-  /* VirtIO device */
-  .vdev = {
-    .header = {
-      .type = RSC_VDEV,
-    },
-    .vdev = {
-      .id = VIRTIO_ID_RPROC_SERIAL,
-      .notifyid = 0,
-      .dfeatures = 0,
-      .config_len = 0xc,
-      .num_of_vrings = 2,
-    },
-    .vrings = {
-      [0] = {
-	.align = 0x10,
-	.num = 0x4,
-	.notifyid = 0,
-      },
-      [1] = {
-	.align = 0x10,
-	.num = 0x4,
-	.notifyid = 0,
-      },
-    },
-  },
+#pragma DATA_SECTION(resourceTable, ".resource_table")
+#pragma RETAIN(resourceTable)
+struct my_resource_table resourceTable = {
+	1,	/* Resource table version: only version 1 is supported by the current driver */
+	1,	/* number of entries in the table */
+	0, 0,	/* reserved, must be zero */
+	/* offsets to entries */
+	{
+		offsetof(struct my_resource_table, carveout),
+	},
+	/* carveout */
+	{
+	  (uint32_t) TYPE_CARVEOUT, /* type */
+	  (uint32_t) 0, /* da */
+	  (uint32_t) 0, /* pa */
+	  (uint32_t) 1<<23, /* len (8MB) */
+	  (uint32_t) 0, /* flags */
+	  (uint32_t) 0, /* reserved */
+	  "framebufs",
+	},	  
 };
 
+#define CYCLES_PER_SECOND 200000000 /* PRU has 200 MHz clock */
+
+// https://markayoder.github.io/PRUCookbook/05blocks/blocks.html#blocks_mapping_bits
+#define P9_31 (1 << 0)  // blue
+#define P9_29 (1 << 1)  // orange
+#define P9_30 (1 << 2)  // green
+#define P9_28 (1 << 3)  // red
+
+#define R P9_28
+#define G P9_30
+#define B P9_31
+#define O P9_29
+
+volatile register uint32_t __R30; /* output register for PRU */
+
+void main(void) {
+    while (1) {
+      __R30 |= R|G|B|O;
+      __delay_cycles(CYCLES_PER_SECOND / 10);
+      __R30 &= ~R;
+      __R30 &= ~G;
+      __R30 &= ~B;
+      __R30 &= ~O;
+      __delay_cycles(CYCLES_PER_SECOND / 10);
+    }
+}

@@ -1,13 +1,14 @@
 #!/bin/sh
 
-#export PRU_CGT=/usr/lib/ti/pru-software-support-package
+make output/pru.o PROC=pru TARGET=pru CHIP=AM335x
 
-#export PRU_CGT=/usr/share/ti/cgt-pru
-#export TARGET=pru
-#make
+make output/pru.out PROC=pru TARGET=pru CHIP=AM335x
 
-#clpru -I /usr/lib/ti/pru-software-support-package/include -I /usr/share/ti/cgt-pru/include pru.c
+cp output/pru.out /lib/firmware/blink4-fw
 
-#export PRU_CGT=/usr/share/ti/cgt-pru
-make output/pru.o PROC=pru
+echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
 
+echo "Stopping ..."
+echo stop > /sys/class/remoteproc/remoteproc1/state
+echo "Starting ..."
+echo start > /sys/class/remoteproc/remoteproc1/state

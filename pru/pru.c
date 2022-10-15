@@ -1,8 +1,9 @@
-#include <rsc_types.h>
 #include <pru_rpmsg.h>
 #include <pru_virtio_ids.h>
-#include <am335x/pru_cfg.h> 
-#include <am335x/pru_intc.h> 
+#include <rsc_types.h>
+
+#include <am335x/pru_cfg.h>
+#include <am335x/pru_intc.h>
 
 #define VIRTIO_CONFIG_S_DRIVER_OK 4
 
@@ -11,42 +12,41 @@
  * Sizes of the virtqueues (expressed in number of buffers supported,
  * and must be power of 2)
  */
-#define PRU_RPMSG_VQ0_SIZE	16
-#define PRU_RPMSG_VQ1_SIZE	16
+#define PRU_RPMSG_VQ0_SIZE 16
+#define PRU_RPMSG_VQ1_SIZE 16
 
 /* The feature bitmap for virtio rpmsg
  */
-#define VIRTIO_RPMSG_F_NS	0		//name service notifications
+#define VIRTIO_RPMSG_F_NS 0 // name service notifications
 
 /* This firmware supports name service notifications as one of its features */
-#define RPMSG_PRU_C0_FEATURES	(1 << VIRTIO_RPMSG_F_NS)
+#define RPMSG_PRU_C0_FEATURES (1 << VIRTIO_RPMSG_F_NS)
 
-/* The PRU-ICSS system events used for RPMsg are defined in the Linux device tree
- * PRU0 uses system event 16 (To ARM) and 17 (From ARM)
- * PRU1 uses system event 18 (To ARM) and 19 (From ARM)
+/* The PRU-ICSS system events used for RPMsg are defined in the Linux device
+ * tree PRU0 uses system event 16 (To ARM) and 17 (From ARM) PRU1 uses system
+ * event 18 (To ARM) and 19 (From ARM)
  */
-#define TO_ARM_HOST   16	
+#define TO_ARM_HOST 16
 #define FROM_ARM_HOST 17
 
 /* Host-0 Interrupt sets bit 30 in register R31 */
-#define HOST_INT			((uint32_t) 1 << 30)	
+#define HOST_INT ((uint32_t)1 << 30)
 
 /* Copied from the internet! */
-#define offsetof(st, m) \
-    ((uint32_t)&(((st *)0)->m))
+#define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
 /* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
 // Note: wrong PRU
 /* struct ch_map pru_intc_map[] = { {18, 3}, */
 /* 				 {19, 1}, */
 /* }; */
-struct ch_map pru_intc_map[] = { 
-	{16, 2},
-	{17, 0},
+struct ch_map pru_intc_map[] = {
+    {16, 2},
+    {17, 0},
 };
 
 /* Definition for unused interrupts */
-#define HOST_UNUSED		255
+#define HOST_UNUSED 255
 
 struct my_resource_table {
   struct resource_table base;
@@ -125,12 +125,12 @@ struct my_resource_table resourceTable = {
             /* PRU_INTS version */
             0x0000,
             /* Channel-to-host mapping, 255 for unused */
-	    0,
-	    HOST_UNUSED,
-	    2,
-	    HOST_UNUSED,
+            0,
+            HOST_UNUSED,
+            2,
+            HOST_UNUSED,
 
-	    // Note: wrong PRU
+            // Note: wrong PRU
             /* HOST_UNUSED, */
             /* 1, */
             /* HOST_UNUSED, */
@@ -153,10 +153,10 @@ struct my_resource_table resourceTable = {
 #define CYCLES_PER_SECOND 200000000 /* PRU has 200 MHz clock */
 
 // https://markayoder.github.io/PRUCookbook/05blocks/blocks.html#blocks_mapping_bits
-#define P9_31 (1 << 0)  // blue
-#define P9_29 (1 << 1)  // orange
-#define P9_30 (1 << 2)  // green
-#define P9_28 (1 << 3)  // red
+#define P9_31 (1 << 0) // blue
+#define P9_29 (1 << 1) // orange
+#define P9_30 (1 << 2) // green
+#define P9_28 (1 << 3) // red
 
 #define R P9_28
 #define G P9_30
@@ -167,9 +167,9 @@ struct my_resource_table resourceTable = {
  * Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
  * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
  */
-#define CHAN_NAME			"rpmsg-pru"
-#define CHAN_DESC			"Channel 30"
-#define CHAN_PORT			30
+#define CHAN_NAME "rpmsg-pru"
+#define CHAN_DESC "Channel 30"
+#define CHAN_PORT 30
 
 char payload[RPMSG_BUF_SIZE];
 
@@ -180,16 +180,16 @@ void test(void);
 
 void main(void) {
   test();
-  
-    while (1) {
-      __R30 |= R|G|B|O;
-      __delay_cycles(CYCLES_PER_SECOND / 10);
-      __R30 &= ~R;
-      __R30 &= ~G;
-      __R30 &= ~B;
-      __R30 &= ~O;
-      __delay_cycles(CYCLES_PER_SECOND / 10);
-    }
+
+  while (1) {
+    __R30 |= R | G | B | O;
+    __delay_cycles(CYCLES_PER_SECOND / 10);
+    __R30 &= ~R;
+    __R30 &= ~G;
+    __R30 &= ~B;
+    __R30 &= ~O;
+    __delay_cycles(CYCLES_PER_SECOND / 10);
+  }
 }
 
 void test(void) {
@@ -227,12 +227,25 @@ void test(void) {
       CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
       /* Receive all available messages, multiple messages can be sent per kick
        */
-      while (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
-             PRU_RPMSG_SUCCESS) {
-        /* Echo the message back to the same address from which we just received
-         */
-        pru_rpmsg_send(&transport, dst, src, payload, len);
+      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
+          PRU_RPMSG_SUCCESS) {
+        break;
       }
     }
+  }
+  memcpy(payload, &resourceTable.carveout.pa, 4);
+  pru_rpmsg_send(&transport, dst, src, payload, 4);
+
+  uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
+  uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
+
+  volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
+
+  for (; shared < limit; shared++) {
+    *shared = (shared - start);
+  }
+
+  while (1) {
+    __delay_cycles(CYCLES_PER_SECOND / 10);
   }
 }

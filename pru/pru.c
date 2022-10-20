@@ -26,8 +26,12 @@
  * tree PRU0 uses system event 16 (To ARM) and 17 (From ARM) PRU1 uses system
  * event 18 (To ARM) and 19 (From ARM)
  */
-#define TO_ARM_HOST 16
-#define FROM_ARM_HOST 17
+// PRU 0
+//#define TO_ARM_HOST 16
+//#define FROM_ARM_HOST 17
+// PRU 1
+#define TO_ARM_HOST 18
+#define FROM_ARM_HOST 19
 
 /* Host-0 Interrupt sets bit 30 in register R31 */
 #define HOST_INT ((uint32_t)1 << 30)
@@ -36,14 +40,16 @@
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
 /* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
-// Note: wrong PRU
-/* struct ch_map pru_intc_map[] = { {18, 3}, */
-/* 				 {19, 1}, */
-/* }; */
+// PRU 1?
 struct ch_map pru_intc_map[] = {
-    {16, 2},
-    {17, 0},
+    {18, 3},
+    {19, 1},
 };
+// PRU 0?
+/* struct ch_map pru_intc_map[] = { */
+/*     {16, 2}, */
+/*     {17, 0}, */
+/* }; */
 
 /* Definition for unused interrupts */
 #define HOST_UNUSED 255
@@ -124,17 +130,20 @@ struct my_resource_table resourceTable = {
         {
             /* PRU_INTS version */
             0x0000,
-            /* Channel-to-host mapping, 255 for unused */
-            0,
-            HOST_UNUSED,
-            2,
-            HOST_UNUSED,
 
-            // Note: wrong PRU
+            /* Channel-to-host mapping, 255 for unused */
+
+            // PRU 0
+            /* 0, */
             /* HOST_UNUSED, */
-            /* 1, */
+            /* 2, */
             /* HOST_UNUSED, */
-            /* 3, */
+
+            // PRU 1?
+            1,
+            HOST_UNUSED,
+            3,
+            HOST_UNUSED,
 
             HOST_UNUSED,
             HOST_UNUSED,
@@ -150,19 +159,6 @@ struct my_resource_table resourceTable = {
     },
 };
 
-#define CYCLES_PER_SECOND 200000000 /* PRU has 200 MHz clock */
-
-// https://markayoder.github.io/PRUCookbook/05blocks/blocks.html#blocks_mapping_bits
-#define P9_31 (1 << 0) // blue
-#define P9_29 (1 << 1) // orange
-#define P9_30 (1 << 2) // green
-#define P9_28 (1 << 3) // red
-
-#define R P9_28
-#define G P9_30
-#define B P9_31
-#define O P9_29
-
 /*
  * Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
  * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
@@ -173,26 +169,39 @@ struct my_resource_table resourceTable = {
 
 char payload[RPMSG_BUF_SIZE];
 
+// Set up the pointers to each of the GPIO ports
+uint32_t *gpio0 = (uint32_t *)0x44e07000; // GPIO Bank 0  See Table 2.2 of TRM
+uint32_t *gpio1 = (uint32_t *)0x4804c000; // GPIO Bank 1
+uint32_t *gpio2 = (uint32_t *)0x481ac000; // GPIO Bank 2
+uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
+
+#define GPIO_CLEARDATAOUT (0x190 / 4) // For clearing the GPIO registers
+#define GPIO_SETDATAOUT (0x194 / 4)   // For setting the GPIO registers
+#define GPIO_DATAOUT (0x138 / 4)      // For reading the GPIO registers
+
 volatile register uint32_t __R30; /* output register for PRU */
 volatile register uint32_t __R31; /* input register for PRU */
 
-void test(void);
+// Clock is P8-43 (pruout) R30 bit 2
+#define CLOCK_SHIFT 2
+
+// Latch is P8-46 (pruout) R30 bit 1
+#define LATCH_SHIFT 1
+
+// OE is P8-45 (pruout) R30 bit 0
+#define OE_SHIFT 0
+
+// Delay in cycles
+#define DELAY 10
+
+void setRow(uint32_t row);
+void clock();
+void setPix0();
+void setPix1();
+void latchRows();
 
 void main(void) {
-  test();
 
-  while (1) {
-    __R30 |= R | G | B | O;
-    __delay_cycles(CYCLES_PER_SECOND / 10);
-    __R30 &= ~R;
-    __R30 &= ~G;
-    __R30 &= ~B;
-    __R30 &= ~O;
-    __delay_cycles(CYCLES_PER_SECOND / 10);
-  }
-}
-
-void test(void) {
   struct pru_rpmsg_transport transport;
   uint16_t src, dst, len;
   volatile uint8_t *status;
@@ -233,9 +242,11 @@ void test(void) {
       }
     }
   }
+  // Send the carveout address to the ARM program.
   memcpy(payload, &resourceTable.carveout.pa, 4);
   pru_rpmsg_send(&transport, dst, src, payload, 4);
 
+  // Initialize the carveout (testing)
   uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
   uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
 
@@ -245,7 +256,56 @@ void test(void) {
     *shared = (shared - start);
   }
 
+  // Begin display loop
+  uint32_t i, row;
+
   while (1) {
-    __delay_cycles(CYCLES_PER_SECOND / 10);
+    for (row = 0; row < 16; row++) {
+      setRow(row);
+
+      for (i = 0; i < 64; i++) {
+        setPix0();
+        clock();
+        setPix1();
+        clock();
+      }
+
+      latchRows();
+    }
   }
+}
+
+void setRow(uint32_t on) {
+  // 0xf because 4 lines.  If this were a x64 panel (1/32 scan) use 0x1f.
+  uint32_t off = ~on & 0xf;
+
+  // Selector bits start at position 13 in gpio2
+  gpio2[GPIO_SETDATAOUT] = on << 13;
+  gpio2[GPIO_CLEARDATAOUT] = off << 13;
+}
+
+void clock() {
+  __R30 |= 1 << CLOCK_SHIFT;
+  __delay_cycles(DELAY);
+  __R30 &= ~(1 << CLOCK_SHIFT);
+  __delay_cycles(DELAY);
+}
+
+void latchRows() {
+  __R30 |= 1 << OE_SHIFT;
+  __delay_cycles(DELAY);
+  __R30 |= 1 << LATCH_SHIFT;
+  __delay_cycles(DELAY);
+  __R30 &= ~(1 << LATCH_SHIFT);
+  __delay_cycles(DELAY);
+  __R30 &= ~(1 << OE_SHIFT);
+  __delay_cycles(DELAY);
+}
+
+void setPix0() {
+  gpio2[GPIO_SETDATAOUT] = (1 << 9); // red
+}
+
+void setPix1() {
+  gpio2[GPIO_SETDATAOUT] = (1 << 23); // blue
 }

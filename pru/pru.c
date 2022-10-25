@@ -182,29 +182,22 @@ uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 volatile register uint32_t __R30; /* output register for PRU */
 volatile register uint32_t __R31; /* input register for PRU */
 
-// Clock is P8-43 (pruout) R30 bit 2
-#define CLOCK_SHIFT 2
-
-// Latch is P8-46 (pruout) R30 bit 1
-#define LATCH_SHIFT 1
-
-// OE is P8-45 (pruout) R30 bit 0
-#define OE_SHIFT 0
-
 // Delay in cycles
 #define DELAY 10
 
+void sleep1();
 void setRow(uint32_t row);
-void clock();
+void testPix();
+void toggleClock();
 void setPix0();
 void setPix1();
 void latchRows();
 
 void main(void) {
 
-  struct pru_rpmsg_transport transport;
-  uint16_t src, dst, len;
-  volatile uint8_t *status;
+  /* struct pru_rpmsg_transport transport; */
+  /* uint16_t src, dst, len; */
+  /* volatile uint8_t *status; */
 
   /* Allow OCP master port access by the PRU so the PRU can read external
    * memories */
@@ -214,50 +207,56 @@ void main(void) {
    * 'kick' us */
   CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 
-  /* Make sure the Linux drivers are ready for RPMsg communication */
-  status = &resourceTable.rpmsg_vdev.status;
-  while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK))
-    ;
+  // /\* Make sure the Linux drivers are ready for RPMsg communication *\/
+  // status = &resourceTable.rpmsg_vdev.status;
+  // while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK))
+  //   ;
 
-  /* Initialize the RPMsg transport structure */
-  pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
-                 &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
+  // /\* Initialize the RPMsg transport structure *\/
+  // pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
+  //                &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
 
-  /* Create the RPMsg channel between the PRU and ARM user space using the
-   * transport structure. */
-  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC,
-                           CHAN_PORT) != PRU_RPMSG_SUCCESS)
-    ;
+  // /\* Create the RPMsg channel between the PRU and ARM user space using the
+  //  * transport structure. *\/
+  // while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC,
+  //                          CHAN_PORT) != PRU_RPMSG_SUCCESS)
+  //   ;
 
-  while (1) {
-    /* Check bit 31 of register R31 to see if the ARM has kicked us */
-    if (__R31 & HOST_INT) {
-      /* Clear the event status */
-      CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
-      /* Receive all available messages, multiple messages can be sent per kick
-       */
-      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
-          PRU_RPMSG_SUCCESS) {
-        break;
-      }
-    }
-  }
-  // Send the carveout address to the ARM program.
-  memcpy(payload, &resourceTable.carveout.pa, 4);
-  pru_rpmsg_send(&transport, dst, src, payload, 4);
+  // while (1) {
+  //   /\* Check bit 31 of register R31 to see if the ARM has kicked us *\/
+  //   if (__R31 & HOST_INT) {
+  //     /\* Clear the event status *\/
+  //     CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
+  //     /\* Receive all available messages, multiple messages can be sent per
+  // kick
+  //      *\/
+  //     if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
+  //         PRU_RPMSG_SUCCESS) {
+  //       break;
+  //     }
+  //   }
+  // }
+  // // Send the carveout address to the ARM program.
+  // memcpy(payload, &resourceTable.carveout.pa, 4);
+  // pru_rpmsg_send(&transport, dst, src, payload, 4);
 
-  // Initialize the carveout (testing)
-  uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
-  uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
+  // // Initialize the carveout (testing)
+  // uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
+  // uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
 
-  volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
+  // volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
 
-  for (; shared < limit; shared++) {
-    *shared = (shared - start);
-  }
+  // for (; shared < limit; shared++) {
+  //   *shared = (shared - start);
+  // }
 
   // Begin display loop
   uint32_t i, row;
+
+  gpio0[GPIO_CLEARDATAOUT] = 0xffffffff;
+  gpio1[GPIO_CLEARDATAOUT] = 0xffffffff;
+  gpio2[GPIO_CLEARDATAOUT] = 0xffffffff;
+  gpio3[GPIO_CLEARDATAOUT] = 0xffffffff;
 
   while (1) {
     for (row = 0; row < 16; row++) {
@@ -265,9 +264,9 @@ void main(void) {
 
       for (i = 0; i < 64; i++) {
         setPix0();
-        clock();
         setPix1();
-        clock();
+        sleep1();
+        toggleClock();
       }
 
       latchRows();
@@ -275,37 +274,117 @@ void main(void) {
   }
 }
 
-void setRow(uint32_t on) {
-  // 0xf because 4 lines.  If this were a x64 panel (1/32 scan) use 0x1f.
-  uint32_t off = ~on & 0xf;
+#define HI 1
+#define LO 0
 
-  // Selector bits start at position 13 in gpio2
-  gpio2[GPIO_SETDATAOUT] = on << 13;
-  gpio2[GPIO_CLEARDATAOUT] = off << 13;
+void set(uint32_t *gpio, int bit, int on) {
+  gpio[on ? GPIO_SETDATAOUT : GPIO_CLEARDATAOUT] = 1 << bit;
+
+  // if (on) {
+  //   gpio[GPIO_SETDATAOUT] |= 1 << bit;
+  //   gpio[GPIO_CLEARDATAOUT] &= ~(1 << bit);
+  // } else {
+  //   gpio[GPIO_SETDATAOUT] &= ~(1 << bit);
+  //   gpio[GPIO_CLEARDATAOUT] |= 1 << bit;
+  // }
 }
 
-void clock() {
-  __R30 |= 1 << CLOCK_SHIFT;
-  __delay_cycles(DELAY);
-  __R30 &= ~(1 << CLOCK_SHIFT);
-  __delay_cycles(DELAY);
+void uled1(int val) { set(gpio1, 21, val); }
+void uled2(int val) { set(gpio1, 22, val); }
+void uled3(int val) { set(gpio1, 23, val); }
+void uled4(int val) { set(gpio1, 24, val); }
+
+void clock(int val) { set(gpio1, 19, val); }
+void latch(int val) { set(gpio1, 29, val); }
+void outputEnable(int val) { set(gpio1, 28, val); }
+
+void selA(int val) { set(gpio1, 12, val); }
+void selB(int val) { set(gpio1, 13, val); }
+void selC(int val) { set(gpio1, 14, val); }
+void selD(int val) { set(gpio1, 15, val); }
+
+void sleep1() { __delay_cycles(100); }
+
+void setRow(uint32_t on) {
+  // 0xf because 4 address lines.  If this were a x64 panel (1/32
+  // scan) use 0x1f for 5 address lines.
+  uint32_t off = on ^ 0xf;
+
+  // Selector bits start at position 12 in gpio1
+  gpio1[GPIO_SETDATAOUT] = on << 12;
+  gpio1[GPIO_CLEARDATAOUT] = off << 12;
+  sleep1();
+}
+
+void toggleClock() {
+  clock(HI);
+  sleep1();
+  clock(LO);
+  sleep1();
 }
 
 void latchRows() {
-  __R30 |= 1 << OE_SHIFT;
-  __delay_cycles(DELAY);
-  __R30 |= 1 << LATCH_SHIFT;
-  __delay_cycles(DELAY);
-  __R30 &= ~(1 << LATCH_SHIFT);
-  __delay_cycles(DELAY);
-  __R30 &= ~(1 << OE_SHIFT);
-  __delay_cycles(DELAY);
+  outputEnable(HI);
+  sleep1();
+  latch(HI);
+  sleep1();
+  latch(LO);
+  sleep1();
+  outputEnable(LO);
+  sleep1();
 }
 
 void setPix0() {
-  gpio2[GPIO_SETDATAOUT] = (1 << 9); // red
+  // GOOD
+
+  // gpio3[GPIO_SETDATAOUT] |= (1U << 17); // J8 r1 (P9-28)
+  // gpio3[GPIO_SETDATAOUT] |= (1U << 16); // J8 g1 (P9-30)
+  gpio3[GPIO_SETDATAOUT] |= (1U << 15); // J8 b1 (P9-29)
+  // gpio3[GPIO_SETDATAOUT] |= (1U << 14); // J8 r2 (P9-31)
+  // gpio0[GPIO_SETDATAOUT] |= (1U << 14); // J8 g2 (P9-26)
+  // missing J8 b2
+
+  // gpio2[GPIO_SETDATAOUT] |= (1U << 2);  // J1 r1 (P8-07)
+  // gpio2[GPIO_SETDATAOUT] |= (1U << 3);  // J1 g1 (P8-08)
+  gpio2[GPIO_SETDATAOUT] |= (1U << 5); // J1 b1 (P8-09)
+  // gpio0[GPIO_SETDATAOUT] |= (1U << 23); // J1 r2 (P8-13)
+  // gpio2[GPIO_SETDATAOUT] |= (1U << 4);  // J1 g2 (P8-10)
+  // missing J1 b2 should be P8-19 according to octo.json?
+
+  // QUESTION
+
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 0);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 1);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 2);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 3);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 4);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 5);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 6);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 7);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 8);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 9);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 10);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 11);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 12);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 13);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 14);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 15);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 16);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 17);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 18);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 19);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 20);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 21);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 22);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 23);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 24);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 25);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 26);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 27);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 28);
+  // // gpio1[GPIO_SETDATAOUT] |= (1U << 29);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 30);
+  // gpio1[GPIO_SETDATAOUT] |= (1U << 31);
 }
 
-void setPix1() {
-  gpio2[GPIO_SETDATAOUT] = (1 << 23); // blue
-}
+void setPix1() {}

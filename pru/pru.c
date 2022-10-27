@@ -39,6 +39,9 @@
 /* Copied from the internet! */
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
+#define SET GPIO_SETDATAOUT
+#define CLEAR GPIO_CLEARDATAOUT
+
 /* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
 // PRU 1?
 struct ch_map pru_intc_map[] = {
@@ -177,20 +180,18 @@ uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 
 #define GPIO_CLEARDATAOUT (0x190 / 4) // For clearing the GPIO registers
 #define GPIO_SETDATAOUT (0x194 / 4)   // For setting the GPIO registers
-#define GPIO_DATAOUT (0x138 / 4)      // For reading the GPIO registers
 
 volatile register uint32_t __R30; /* output register for PRU */
 volatile register uint32_t __R31; /* input register for PRU */
 
 // Delay in cycles
-#define DELAY 10
+#define DELAY 0 // 1000
 
-void sleep1();
+void sleep();
 void setRow(uint32_t row);
 void testPix();
 void toggleClock();
-void setPix0();
-void setPix1();
+void setPix(uint32_t cycle, uint32_t pix);
 void latchRows();
 
 void main(void) {
@@ -251,21 +252,14 @@ void main(void) {
   // }
 
   // Begin display loop
-  uint32_t i, row;
+  uint32_t pix, row, cycle;
 
-  gpio0[GPIO_CLEARDATAOUT] = 0xffffffff;
-  gpio1[GPIO_CLEARDATAOUT] = 0xffffffff;
-  gpio2[GPIO_CLEARDATAOUT] = 0xffffffff;
-  gpio3[GPIO_CLEARDATAOUT] = 0xffffffff;
-
-  while (1) {
+  for (cycle = 0; 1; cycle++) {
     for (row = 0; row < 16; row++) {
       setRow(row);
 
-      for (i = 0; i < 64; i++) {
-        setPix0();
-        setPix1();
-        sleep1();
+      for (pix = 0; pix < 64; pix++) {
+        setPix(cycle, pix);
         toggleClock();
       }
 
@@ -278,15 +272,11 @@ void main(void) {
 #define LO 0
 
 void set(uint32_t *gpio, int bit, int on) {
-  gpio[on ? GPIO_SETDATAOUT : GPIO_CLEARDATAOUT] = 1 << bit;
-
-  // if (on) {
-  //   gpio[GPIO_SETDATAOUT] |= 1 << bit;
-  //   gpio[GPIO_CLEARDATAOUT] &= ~(1 << bit);
-  // } else {
-  //   gpio[GPIO_SETDATAOUT] &= ~(1 << bit);
-  //   gpio[GPIO_CLEARDATAOUT] |= 1 << bit;
-  // }
+  if (on) {
+    gpio[SET] = 1 << bit;
+  } else {
+    gpio[CLEAR] = 1 << bit;
+  }
 }
 
 void uled1(int val) { set(gpio1, 21, val); }
@@ -303,7 +293,7 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
-void sleep1() { __delay_cycles(100); }
+void sleep() { __delay_cycles(DELAY); }
 
 void setRow(uint32_t on) {
   // 0xf because 4 address lines.  If this were a x64 panel (1/32
@@ -311,80 +301,52 @@ void setRow(uint32_t on) {
   uint32_t off = on ^ 0xf;
 
   // Selector bits start at position 12 in gpio1
-  gpio1[GPIO_SETDATAOUT] = on << 12;
-  gpio1[GPIO_CLEARDATAOUT] = off << 12;
-  sleep1();
+  gpio1[SET] = on << 12;
+  gpio1[CLEAR] = off << 12;
 }
 
 void toggleClock() {
+  sleep();
   clock(HI);
-  sleep1();
+  sleep();
   clock(LO);
-  sleep1();
 }
 
 void latchRows() {
   outputEnable(HI);
-  sleep1();
+  sleep();
   latch(HI);
-  sleep1();
+  sleep();
   latch(LO);
-  sleep1();
+  sleep();
   outputEnable(LO);
-  sleep1();
+  sleep();
 }
 
-void setPix0() {
-  // GOOD
+void setPix(uint32_t cycle, uint32_t pix) {
+  // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
-  // gpio3[GPIO_SETDATAOUT] |= (1U << 17); // J8 r1 (P9-28)
-  // gpio3[GPIO_SETDATAOUT] |= (1U << 16); // J8 g1 (P9-30)
-  gpio3[GPIO_SETDATAOUT] |= (1U << 15); // J8 b1 (P9-29)
-  // gpio3[GPIO_SETDATAOUT] |= (1U << 14); // J8 r2 (P9-31)
-  // gpio0[GPIO_SETDATAOUT] |= (1U << 14); // J8 g2 (P9-26)
-  // missing J8 b2
+  int op;
+  if ((cycle % 32) * 2 > pix) {
+    op = SET;
+  } else {
+    op = CLEAR;
+  }
+  // J1 good
+  gpio2[op] |= (1U << 2);  // J1 r1 (P8-07)
+  gpio2[op] |= (1U << 3);  // J1 g1 (P8-08)
+  gpio2[op] |= (1U << 5);  // J1 b1 (P8-09)
+  gpio0[op] |= (1U << 23); // J1 r2 (P8-13)
+  gpio2[op] |= (1U << 4);  // J1 g2 (P8-10)
+  gpio0[op] |= (1U << 26); // J1 b2 (P8-14)
 
-  // gpio2[GPIO_SETDATAOUT] |= (1U << 2);  // J1 r1 (P8-07)
-  // gpio2[GPIO_SETDATAOUT] |= (1U << 3);  // J1 g1 (P8-08)
-  gpio2[GPIO_SETDATAOUT] |= (1U << 5); // J1 b1 (P8-09)
-  // gpio0[GPIO_SETDATAOUT] |= (1U << 23); // J1 r2 (P8-13)
-  // gpio2[GPIO_SETDATAOUT] |= (1U << 4);  // J1 g2 (P8-10)
-  // missing J1 b2 should be P8-19 according to octo.json?
-
-  // QUESTION
-
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 0);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 1);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 2);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 3);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 4);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 5);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 6);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 7);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 8);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 9);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 10);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 11);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 12);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 13);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 14);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 15);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 16);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 17);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 18);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 19);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 20);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 21);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 22);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 23);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 24);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 25);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 26);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 27);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 28);
-  // // gpio1[GPIO_SETDATAOUT] |= (1U << 29);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 30);
-  // gpio1[GPIO_SETDATAOUT] |= (1U << 31);
+  // J3
+  gpio0[op] |= 1U << 30; // r1 (P9-11)
+  gpio1[op] |= 1U << 18; // g1 (P9-14)
+  gpio0[op] |= 1U << 31; // b1 (P9-13)
+  gpio1[op] |= 1U << 16; // r2 (P9-15)
+  gpio0[op] |= 1U << 3;  // g2 (P9-21)
+  gpio0[op] |= 1U << 5;  // b2 (P9-17)
 }
 
 void setPix1() {}

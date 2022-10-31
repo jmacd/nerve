@@ -7,7 +7,6 @@
 
 #define VIRTIO_CONFIG_S_DRIVER_OK 4
 
-#define NOTIFY_ID 1
 /*
  * Sizes of the virtqueues (expressed in number of buffers supported,
  * and must be power of 2)
@@ -27,11 +26,11 @@
  * event 18 (To ARM) and 19 (From ARM)
  */
 // PRU 0
-//#define TO_ARM_HOST 16
-//#define FROM_ARM_HOST 17
+#define TO_ARM_HOST 16
+#define FROM_ARM_HOST 17
 // PRU 1
-#define TO_ARM_HOST 18
-#define FROM_ARM_HOST 19
+// #define TO_ARM_HOST 18
+// #define FROM_ARM_HOST 19
 
 /* Host-0 Interrupt sets bit 30 in register R31 */
 #define HOST_INT ((uint32_t)1 << 30)
@@ -44,15 +43,15 @@
 
 /* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
 // PRU 1?
-struct ch_map pru_intc_map[] = {
-    {18, 3},
-    {19, 1},
-};
+// struct ch_map pru_intc_map[] = {
+//     {18, 3},
+//     {19, 1},
+// };
 // PRU 0?
-/* struct ch_map pru_intc_map[] = { */
-/*     {16, 2}, */
-/*     {17, 0}, */
-/* }; */
+struct ch_map pru_intc_map[] = {
+    {16, 2},
+    {17, 0},
+};
 
 /* Definition for unused interrupts */
 #define HOST_UNUSED 255
@@ -101,7 +100,7 @@ struct my_resource_table resourceTable = {
     {
         (uint32_t)TYPE_VDEV,             // type
         (uint32_t)VIRTIO_ID_RPMSG,       // id
-        (uint32_t)NOTIFY_ID,             // notifyid
+        (uint32_t)0,                     // notifyid
         (uint32_t)RPMSG_PRU_C0_FEATURES, // dfeatures
         (uint32_t)0,                     // gfeatures
         (uint32_t)0,                     // config_len
@@ -137,16 +136,16 @@ struct my_resource_table resourceTable = {
             /* Channel-to-host mapping, 255 for unused */
 
             // PRU 0
-            /* 0, */
-            /* HOST_UNUSED, */
-            /* 2, */
-            /* HOST_UNUSED, */
+            0,
+            HOST_UNUSED,
+            2,
+            HOST_UNUSED,
 
-            // PRU 1?
-            1,
-            HOST_UNUSED,
-            3,
-            HOST_UNUSED,
+            // PRU 1? ?? EH NOT RIGHT
+            // 1,
+            // HOST_UNUSED,
+            // 3,
+            // HOST_UNUSED,
 
             HOST_UNUSED,
             HOST_UNUSED,
@@ -194,80 +193,6 @@ void toggleClock();
 void setPix(uint32_t cycle, uint32_t pix);
 void latchRows();
 
-void main(void) {
-
-  /* struct pru_rpmsg_transport transport; */
-  /* uint16_t src, dst, len; */
-  /* volatile uint8_t *status; */
-
-  /* Allow OCP master port access by the PRU so the PRU can read external
-   * memories */
-  CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
-
-  /* Clear the status of the PRU-ICSS system event that the ARM will use to
-   * 'kick' us */
-  CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
-
-  // /\* Make sure the Linux drivers are ready for RPMsg communication *\/
-  // status = &resourceTable.rpmsg_vdev.status;
-  // while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK))
-  //   ;
-
-  // /\* Initialize the RPMsg transport structure *\/
-  // pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
-  //                &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
-
-  // /\* Create the RPMsg channel between the PRU and ARM user space using the
-  //  * transport structure. *\/
-  // while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC,
-  //                          CHAN_PORT) != PRU_RPMSG_SUCCESS)
-  //   ;
-
-  // while (1) {
-  //   /\* Check bit 31 of register R31 to see if the ARM has kicked us *\/
-  //   if (__R31 & HOST_INT) {
-  //     /\* Clear the event status *\/
-  //     CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
-  //     /\* Receive all available messages, multiple messages can be sent per
-  // kick
-  //      *\/
-  //     if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
-  //         PRU_RPMSG_SUCCESS) {
-  //       break;
-  //     }
-  //   }
-  // }
-  // // Send the carveout address to the ARM program.
-  // memcpy(payload, &resourceTable.carveout.pa, 4);
-  // pru_rpmsg_send(&transport, dst, src, payload, 4);
-
-  // // Initialize the carveout (testing)
-  // uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
-  // uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
-
-  // volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
-
-  // for (; shared < limit; shared++) {
-  //   *shared = (shared - start);
-  // }
-
-  // Begin display loop
-  uint32_t pix, row, cycle;
-
-  for (cycle = 0; 1; cycle++) {
-    for (row = 0; row < 16; row++) {
-      setRow(row);
-
-      for (pix = 0; pix < 64; pix++) {
-        setPix(cycle, pix);
-        toggleClock();
-      }
-
-      latchRows();
-    }
-  }
-}
-
 #define HI 1
 #define LO 0
 
@@ -293,7 +218,9 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
-void sleep() { __delay_cycles(DELAY); }
+void sleep() {
+  // __delay_cycles(DELAY);
+}
 
 void setRow(uint32_t on) {
   // 0xf because 4 address lines.  If this were a x64 panel (1/32
@@ -323,30 +250,122 @@ void latchRows() {
   sleep();
 }
 
+// J1
+// gp2 |= (1U << 2);  // J1 r1 (P8-gp2)
+// 07 |= (1U << 3);  // J1 g1 (P8-08)
+// gp2 |= (1U << 5);  // J1 b1 (P8-09)
+// gp0 |= (1U << 23); // J1 r2 (P8-13)
+// gp2 |= (1U << 4);  // J1 g2 (P8-10)
+// gp0 |= (1U << 26); // J1 b2 (P8-14)
+
+// J3
+// gp0 |= 1U << 30; // r1 (P9-11)
+// gp1 |= 1U << 18; // g1 (P9-14)
+// gp0 |= 1U << 31; // b1 (P9-13)
+// gp1 |= 1U << 16; // r2 (P9-15)
+// gp0 |= 1U << 3;  // g2 (P9-21)
+// gp0 |= 1U << 5;  // b2 (P9-17)
+
+const uint32_t j13_all_g0 =
+    1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
+const uint32_t j13_all_g1 = 1U << 18 | 1U << 16;
+const uint32_t j13_all_g2 = 1U << 4 | 1U << 2 | 1U << 3 | 1U << 5;
+
 void setPix(uint32_t cycle, uint32_t pix) {
   // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
   int op;
-  if ((cycle % 32) * 2 > pix) {
+  // if (cycle > pix) {
+  if ((cycle % 32) >= 16) {
     op = SET;
   } else {
     op = CLEAR;
   }
-  // J1 good
-  gpio2[op] |= (1U << 2);  // J1 r1 (P8-07)
-  gpio2[op] |= (1U << 3);  // J1 g1 (P8-08)
-  gpio2[op] |= (1U << 5);  // J1 b1 (P8-09)
-  gpio0[op] |= (1U << 23); // J1 r2 (P8-13)
-  gpio2[op] |= (1U << 4);  // J1 g2 (P8-10)
-  gpio0[op] |= (1U << 26); // J1 b2 (P8-14)
 
-  // J3
-  gpio0[op] |= 1U << 30; // r1 (P9-11)
-  gpio1[op] |= 1U << 18; // g1 (P9-14)
-  gpio0[op] |= 1U << 31; // b1 (P9-13)
-  gpio1[op] |= 1U << 16; // r2 (P9-15)
-  gpio0[op] |= 1U << 3;  // g2 (P9-21)
-  gpio0[op] |= 1U << 5;  // b2 (P9-17)
+  gpio0[op] = j13_all_g0;
+  gpio1[op] = j13_all_g1;
+  gpio2[op] = j13_all_g2;
 }
 
-void setPix1() {}
+void main(void) {
+  struct pru_rpmsg_transport transport;
+  uint16_t src, dst, len;
+  volatile uint8_t *status;
+
+  // Allow OCP master port access by the PRU so the PRU can read external
+  // memories */
+  CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
+
+  // Clear the status of the PRU-ICSS system event that the ARM will use to
+  // 'kick' us */
+  CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
+
+  // Make sure the Linux drivers are ready for RPMsg communication
+  status = &resourceTable.rpmsg_vdev.status;
+  while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK)) {
+  }
+
+  // Initialize the RPMsg transport structure
+  pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
+                 &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
+
+  // Create the RPMsg channel between the PRU and ARM user
+  // space using the *transport structure.
+  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC,
+                           CHAN_PORT) != PRU_RPMSG_SUCCESS) {
+  }
+
+  while (1) {
+    // Check bit 31 of register R31 to see if the ARM has kicked us
+
+    if (__R31 & HOST_INT) {
+      uled1(HI);
+      // Clear the event status *\/
+      CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
+      // Receive all available messages
+      // multiple messages can be sent per kick *\/
+      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
+          PRU_RPMSG_SUCCESS) {
+        uled2(HI);
+        break;
+      }
+    }
+  }
+  // Send the carveout address to the ARM program.
+  memcpy(payload, &resourceTable.carveout.pa, 4);
+  while (pru_rpmsg_send(&transport, dst, src, payload, 4) !=
+         PRU_RPMSG_SUCCESS) {
+    uled3(HI);
+  }
+
+  uled4(HI);
+
+  // Initialize the carveout (testing)
+  uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
+  uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
+
+  volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
+
+  for (; shared < limit; shared++) {
+    *shared = (shared - start);
+  }
+
+  uled1(HI);
+
+  // Begin display loop
+  uint32_t pix, row, cycle;
+
+  for (cycle = 0; 1; cycle++) {
+    cycle %= 64;
+    for (row = 0; row < 16; row++) {
+      setRow(row);
+
+      for (pix = 0; pix < 64; pix++) {
+        setPix(cycle, pix);
+        toggleClock();
+      }
+
+      latchRows();
+    }
+  }
+}

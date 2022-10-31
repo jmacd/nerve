@@ -17,7 +17,7 @@ cleanup()
 ps ax | grep user.out | awk '{print $1}' | xargs kill -9
 
 echo "Stopping ..."
-#echo stop > /sys/class/remoteproc/remoteproc1/state
+echo stop > /sys/class/remoteproc/remoteproc1/state
 echo stop > /sys/class/remoteproc/remoteproc2/state
 
 #make clean
@@ -29,7 +29,7 @@ make output/pru.out PROC=pru TARGET=pru CHIP=AM335x
 
 cp output/pru.out /lib/firmware/blink4-fw
 
-#echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
+echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
 echo blink4-fw > /sys/class/remoteproc/remoteproc2/firmware
 
 configPins() {
@@ -43,19 +43,19 @@ configPins() {
     done
 }
 
-sleep 1
+#sleep 1
 configPins
-sleep 1
+#sleep 1
 
 echo "Starting ..."
-#echo start > /sys/class/remoteproc/remoteproc1/state
-echo start > /sys/class/remoteproc/remoteproc2/state
+echo start > /sys/class/remoteproc/remoteproc1/state
+#echo start > /sys/class/remoteproc/remoteproc2/state
 
-#sleep 1
-#echo "Running user ..."
+sleep 1
+echo "Running user ..."
 
-#gcc user.c -o user.out
-#./user.out&
-#PID=$$
-#echo "Running... $PID"
-#sleep 3600
+gcc user.c -o user.out
+./user.out&
+PID=$$
+echo "Running... $PID"
+sleep 3600

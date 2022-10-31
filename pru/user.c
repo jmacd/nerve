@@ -42,7 +42,6 @@
 #define MAX_BUFFER_SIZE 512
 char readBuf[MAX_BUFFER_SIZE];
 
-#define NUM_MESSAGES 100
 #define DEVICE_NAME "/dev/rpmsg_pru30"
 
 int main(void) {
@@ -65,7 +64,7 @@ int main(void) {
   }
 
   /* The RPMsg channel exists and the character device is opened */
-  printf("Opened %s, sending %d messages\n\n", DEVICE_NAME, NUM_MESSAGES);
+  printf("Opened %s, sending\n\n", DEVICE_NAME);
 
   /* Send 'hello world!' to the PRU through the RPMsg channel */
   result = write(pollfds[0].fd, "hello world!", 13);
@@ -73,6 +72,8 @@ int main(void) {
     printf("could not send to PRU\n");
     return -1;
   }
+
+  printf("about to read\n");
 
   result = read(pollfds[0].fd, readBuf, MAX_BUFFER_SIZE);
   if (result == 0) {
@@ -84,7 +85,7 @@ int main(void) {
   printf("Message %d received from PRU (%d bytes) %x\n", i, result, addr);
 
   /* Received all the messages the example is complete */
-  printf("Received %d messages, closing %s\n", NUM_MESSAGES, DEVICE_NAME);
+  printf("Closing %s\n", DEVICE_NAME);
 
   int fd = open("/dev/mem", O_RDWR, 0);
 

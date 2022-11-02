@@ -96,10 +96,19 @@ int main(void) {
 
   printf("Mapped at addr=%x\n", vptr);
 
-  volatile uint32_t *shared = (uint32_t *)vptr;
+  volatile uint32_t *first = (uint32_t *)vptr;
+  volatile uint32_t *ptr = first;
+  volatile uint32_t *limit = (uint32_t *)(vptr + (1 << 23));
 
-  for (uint32_t i = 0; i < 1 << 21; i++) {
-    printf("[%x] at addr=%x\n", i, shared[i]);
+  while (ptr < limit) {
+    if (*ptr == 0) {
+      continue;
+    }
+    if (ptr > first) {
+      printf("cycles: %d\n", *(ptr + 0) - *(ptr - 2));
+      printf("stall: %d\n", *(ptr + 1) - *(ptr - 1));
+    }
+    ptr += 2;
   }
 
   /* Close the rpmsg_pru character device file */

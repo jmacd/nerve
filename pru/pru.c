@@ -3,54 +3,48 @@
 #include <rsc_types.h>
 
 #include <am335x/pru_cfg.h>
+#include <am335x/pru_ctrl.h>
 #include <am335x/pru_intc.h>
 
-#define VIRTIO_CONFIG_S_DRIVER_OK 4
+// Set in resourceTable.rpmsg_vdev.status when the kernel is ready.
+#define VIRTIO_CONFIG_S_DRIVER_OK ((uint32_t)1 << 2)
 
-/*
- * Sizes of the virtqueues (expressed in number of buffers supported,
- * and must be power of 2)
- */
+// Sizes of the virtqueues (expressed in number of buffers supported,
+// and must be power of 2)
 #define PRU_RPMSG_VQ0_SIZE 16
 #define PRU_RPMSG_VQ1_SIZE 16
 
-/* The feature bitmap for virtio rpmsg
- */
+// The feature bitmap for virtio rpmsg
 #define VIRTIO_RPMSG_F_NS 0 // name service notifications
 
-/* This firmware supports name service notifications as one of its features */
+// This firmware supports name service notifications as one of its features.
 #define RPMSG_PRU_C0_FEATURES (1 << VIRTIO_RPMSG_F_NS)
 
-/* The PRU-ICSS system events used for RPMsg are defined in the Linux device
- * tree PRU0 uses system event 16 (To ARM) and 17 (From ARM) PRU1 uses system
- * event 18 (To ARM) and 19 (From ARM)
- */
-// PRU 0
-#define TO_ARM_HOST 16
-#define FROM_ARM_HOST 17
-// PRU 1
-// #define TO_ARM_HOST 18
-// #define FROM_ARM_HOST 19
+// sysevt 16 == pr1_pru_mst_intr[0]_intr_req
+#define SYSEVT_TO_ARM 16
 
-/* Host-0 Interrupt sets bit 30 in register R31 */
-#define HOST_INT ((uint32_t)1 << 30)
+// sysevt 17 == pr1_pru_mst_intr[1]_intr_req
+#define SYSEVT_FROM_ARM 17
 
-/* Copied from the internet! */
+// Chanel 2 is the first PRU->ARM interrupt channel.
+#define HOST_INTERRUPT_CHANNEL_TO_ARM0 2
+
+// Channel 0 is the first ARM->PRU interrupt channel.
+#define HOST_INTERRUPT_CHANNEL_TO_PRU0 0
+
+// Host-0 Interrupt sets bit 30 in register R31
+#define INTERRUPT_CHANNEL_PRU0_MASK ((uint32_t)1 << 30)
+
+// (From the internet!) */
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
 #define SET GPIO_SETDATAOUT
 #define CLEAR GPIO_CLEARDATAOUT
 
-/* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
-// PRU 1?
-// struct ch_map pru_intc_map[] = {
-//     {18, 3},
-//     {19, 1},
-// };
-// PRU 0?
+// Mapping sysevts to a channel. Each pair contains a sysevt, channel.
 struct ch_map pru_intc_map[] = {
-    {16, 2},
-    {17, 0},
+    {SYSEVT_TO_ARM, HOST_INTERRUPT_CHANNEL_TO_ARM0},
+    {SYSEVT_FROM_ARM, HOST_INTERRUPT_CHANNEL_TO_PRU0},
 };
 
 /* Definition for unused interrupts */
@@ -131,21 +125,19 @@ struct my_resource_table resourceTable = {
         sizeof(struct fw_rsc_custom_ints),
         {
             /* PRU_INTS version */
-            0x0000,
+            PRU_INTS_VER0,
 
-            /* Channel-to-host mapping, 255 for unused */
+            // 10 channels, of which two are mapped.  See TRM 4.4.2.1.
+            // "Host Interrupt 0 is connected to bit 30 in register 31 of PRU0
+            // and PRU1."
+            HOST_INTERRUPT_CHANNEL_TO_PRU0,
 
-            // PRU 0
-            0,
             HOST_UNUSED,
-            2,
-            HOST_UNUSED,
 
-            // PRU 1? ?? EH NOT RIGHT
-            // 1,
-            // HOST_UNUSED,
-            // 3,
-            // HOST_UNUSED,
+            // Host Interrupts 2-9 exported from PRU-ICSS for
+            // signaling ARM interrupt controllers or other
+            // machines like EDMA
+            HOST_INTERRUPT_CHANNEL_TO_ARM0,
 
             HOST_UNUSED,
             HOST_UNUSED,
@@ -153,9 +145,12 @@ struct my_resource_table resourceTable = {
             HOST_UNUSED,
             HOST_UNUSED,
             HOST_UNUSED,
-            /* Number of evts being mapped to channels */
+            HOST_UNUSED,
+
+            // Number of evts being mapped to channels.
             (sizeof(pru_intc_map) / sizeof(struct ch_map)),
-            /* Pointer to the structure containing mapped events */
+
+            // The structure containing mapped events.
             pru_intc_map,
         },
     },
@@ -275,16 +270,17 @@ void setPix(uint32_t cycle, uint32_t pix) {
   // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
   int op;
-  // if (cycle > pix) {
-  if ((cycle % 32) >= 16) {
-    op = SET;
-  } else {
-    op = CLEAR;
-  }
+  // // if (cycle > pix) {
+  // if ((cycle % 32) >= 16) {
+  op = SET;
+  // } else {
+  //   op = CLEAR;
+  // }
 
   gpio0[op] = j13_all_g0;
   gpio1[op] = j13_all_g1;
   gpio2[op] = j13_all_g2;
+  //  gpio3[op] = 0;
 }
 
 void main(void) {
@@ -296,9 +292,11 @@ void main(void) {
   // memories */
   CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
-  // Clear the status of the PRU-ICSS system event that the ARM will use to
-  // 'kick' us */
-  CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
+  // Enable PRU0 cycle counter.
+  PRU0_CTRL.CTRL_bit.CTR_EN = 1;
+
+  // Clear the system event that the ARM sends.
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_FROM_ARM;
 
   // Make sure the Linux drivers are ready for RPMsg communication
   status = &resourceTable.rpmsg_vdev.status;
@@ -307,7 +305,7 @@ void main(void) {
 
   // Initialize the RPMsg transport structure
   pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
-                 &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
+                 &resourceTable.rpmsg_vring1, SYSEVT_TO_ARM, SYSEVT_FROM_ARM);
 
   // Create the RPMsg channel between the PRU and ARM user
   // space using the *transport structure.
@@ -317,16 +315,14 @@ void main(void) {
 
   while (1) {
     // Check bit 31 of register R31 to see if the ARM has kicked us
+    if (__R31 & INTERRUPT_CHANNEL_PRU0_MASK) {
 
-    if (__R31 & HOST_INT) {
-      uled1(HI);
       // Clear the event status *\/
-      CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
-      // Receive all available messages
-      // multiple messages can be sent per kick *\/
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_FROM_ARM;
+
+      // Receive all available messages.
       if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
           PRU_RPMSG_SUCCESS) {
-        uled2(HI);
         break;
       }
     }
@@ -335,22 +331,11 @@ void main(void) {
   memcpy(payload, &resourceTable.carveout.pa, 4);
   while (pru_rpmsg_send(&transport, dst, src, payload, 4) !=
          PRU_RPMSG_SUCCESS) {
-    uled3(HI);
   }
-
-  uled4(HI);
 
   // Initialize the carveout (testing)
   uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
   uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
-
-  volatile uint32_t *shared = (uint32_t *)resourceTable.carveout.pa;
-
-  for (; shared < limit; shared++) {
-    *shared = (shared - start);
-  }
-
-  uled1(HI);
 
   // Begin display loop
   uint32_t pix, row, cycle;
@@ -366,6 +351,10 @@ void main(void) {
       }
 
       latchRows();
+    }
+    if (start < limit) {
+      *start++ = PRU0_CTRL.CYCLE;
+      *start++ = PRU0_CTRL.STALL;
     }
   }
 }

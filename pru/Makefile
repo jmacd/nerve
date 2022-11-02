@@ -24,7 +24,7 @@ C6X_CGT:=/usr/share/ti/cgt-c6x
 TIDL_API_DIR:=/usr/share/ti/tidl/tidl_api
 GEN_DIR:=output
 MODEL:=$(shell cat /proc/device-tree/model | sed 's/ /_/g' | tr -d '\000')
-$(warning MODEL=$(MODEL),TARGET=$(TARGET),COMMON=$(COMMON))
+#$(warning MODEL=$(MODEL),TARGET=$(TARGET),COMMON=$(COMMON))
 
 #
 # Define PROC and build variables
@@ -143,7 +143,7 @@ endef
 
 ifneq ($(TARGET),)
 $(eval $(call target-to-proc,$(TARGET).out))
-$(warning GEN_DIR=$(GEN_DIR),CHIP=$(CHIP),PROC=$(PROC),PRUN=$(PRUN),PRU_DIR=$(PRU_DIR),EXE=$(EXE))
+#$(warning GEN_DIR=$(GEN_DIR),CHIP=$(CHIP),PROC=$(PROC),PRUN=$(PRUN),PRU_DIR=$(PRU_DIR),EXE=$(EXE))
 
 all: stop install start
 	@echo "MODEL   = $(MODEL)"

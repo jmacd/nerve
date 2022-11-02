@@ -18,7 +18,7 @@ ps ax | grep user.out | awk '{print $1}' | xargs kill -9
 
 echo "Stopping ..."
 echo stop > /sys/class/remoteproc/remoteproc1/state
-echo stop > /sys/class/remoteproc/remoteproc2/state
+#echo stop > /sys/class/remoteproc/remoteproc2/state
 
 #make clean
 rm -rf output
@@ -30,7 +30,7 @@ make output/pru.out PROC=pru TARGET=pru CHIP=AM335x
 cp output/pru.out /lib/firmware/blink4-fw
 
 echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
-echo blink4-fw > /sys/class/remoteproc/remoteproc2/firmware
+#echo blink4-fw > /sys/class/remoteproc/remoteproc2/firmware
 
 configPins() {
     echo "Configuring user LEDs"
@@ -52,10 +52,10 @@ echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
 sleep 1
-echo "Running user ..."
+echo "Building user ..."
 
 gcc user.c -o user.out
-./user.out&
-PID=$$
-echo "Running... $PID"
+#./user.out&
+#PID=$$
+#echo "Running... $PID"
 sleep 3600

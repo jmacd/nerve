@@ -6,6 +6,9 @@
 #include <am335x/pru_ctrl.h>
 #include <am335x/pru_intc.h>
 
+volatile register uint32_t __R30; /* output register for PRU */
+volatile register uint32_t __R31; /* input/interrupt register for PRU */
+
 // Set in resourceTable.rpmsg_vdev.status when the kernel is ready.
 #define VIRTIO_CONFIG_S_DRIVER_OK ((uint32_t)1 << 2)
 
@@ -21,21 +24,35 @@
 #define RPMSG_PRU_C0_FEATURES (1 << VIRTIO_RPMSG_F_NS)
 
 // sysevt 16 == pr1_pru_mst_intr[0]_intr_req
-#define SYSEVT_TO_ARM 16
+#define SYSEVT_PRU_TO_ARM 16
 
 // sysevt 17 == pr1_pru_mst_intr[1]_intr_req
-#define SYSEVT_FROM_ARM 17
+#define SYSEVT_ARM_TO_PRU 17
 
-// Chanel 2 is the first PRU->ARM interrupt channel.
-#define HOST_INTERRUPT_CHANNEL_TO_ARM0 2
+// sysevt 18 == pr1_pru_mst_intr[2]_intr_req
+#define SYSEVT_PRU_TO_EDMA 18
 
-// Channel 0 is the first ARM->PRU interrupt channel.
-#define HOST_INTERRUPT_CHANNEL_TO_PRU0 0
+// sysevt 63 == tpcc_int_pend_po1
+#define SYSEVT_EDMA_TO_PRU 63
 
-// Host-0 Interrupt sets bit 30 in register R31
-#define INTERRUPT_CHANNEL_PRU0_MASK ((uint32_t)1 << 30)
+// Chanel 2 is the first (of 8) PRU interrupt output channels.
+#define HOST_INTERRUPT_CHANNEL_PRU_TO_ARM 2
 
-// (From the internet!) */
+// Channel 0 is the first (of 2) PRU interrupt input channels.
+#define HOST_INTERRUPT_CHANNEL_ARM_TO_PRU 0
+
+// Chanel 9 is the last (of 8) PRU interrupt output channels,
+// a.k.a. pr1_host[7] maps to DMA channel 0 (see TRM 11.3.20).
+#define HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA 9
+
+// Channel 1 is the second (of 2) PRU interrupt input channels.
+#define HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU 1
+
+// Interrupt inputs set bits 30 and 31 in register R31.
+#define PRU_R31_INTERRUPT_FROM_ARM ((uint32_t)1 << 30)  // Fixed, equals channel 0
+#define PRU_R31_INTERRUPT_FROM_EDMA ((uint32_t)1 << 31) // Fixed, equals channel 1
+
+// (From the internet!)
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
 #define SET GPIO_SETDATAOUT
@@ -43,8 +60,11 @@
 
 // Mapping sysevts to a channel. Each pair contains a sysevt, channel.
 struct ch_map pru_intc_map[] = {
-    {SYSEVT_TO_ARM, HOST_INTERRUPT_CHANNEL_TO_ARM0},
-    {SYSEVT_FROM_ARM, HOST_INTERRUPT_CHANNEL_TO_PRU0},
+    {SYSEVT_PRU_TO_ARM, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
+    {SYSEVT_ARM_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+
+    {SYSEVT_EDMA_TO_PRU, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
+    {SYSEVT_PRU_TO_EDMA, HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA},
 };
 
 /* Definition for unused interrupts */
@@ -68,9 +88,9 @@ struct my_resource_table {
 #pragma RETAIN(resourceTable)
 struct my_resource_table resourceTable = {
     {
-        1, /* Resource table version: only version 1 is supported by the current
-              driver */
-        3, /* number of entries in the table */
+        1,    /* Resource table version: only version 1 is supported by the current
+                 driver */
+        3,    /* number of entries in the table */
         0, 0, /* reserved, must be zero */
     },
     /* offsets to entries */
@@ -127,25 +147,22 @@ struct my_resource_table resourceTable = {
             /* PRU_INTS version */
             PRU_INTS_VER0,
 
-            // 10 channels, of which two are mapped.  See TRM 4.4.2.1.
-            // "Host Interrupt 0 is connected to bit 30 in register 31 of PRU0
-            // and PRU1."
-            HOST_INTERRUPT_CHANNEL_TO_PRU0,
+            // See TRM 4.4.2.1.  Two interrupt input channels.
+            HOST_INTERRUPT_CHANNEL_ARM_TO_PRU,
+            HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU,
 
+            // Two used output interrupt channels.
+            HOST_INTERRUPT_CHANNEL_PRU_TO_ARM,
+
+            // Six unused interrupt output channels.
+            HOST_UNUSED,
+            HOST_UNUSED,
+            HOST_UNUSED,
+            HOST_UNUSED,
+            HOST_UNUSED,
             HOST_UNUSED,
 
-            // Host Interrupts 2-9 exported from PRU-ICSS for
-            // signaling ARM interrupt controllers or other
-            // machines like EDMA
-            HOST_INTERRUPT_CHANNEL_TO_ARM0,
-
-            HOST_UNUSED,
-            HOST_UNUSED,
-            HOST_UNUSED,
-            HOST_UNUSED,
-            HOST_UNUSED,
-            HOST_UNUSED,
-            HOST_UNUSED,
+            HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA,
 
             // Number of evts being mapped to channels.
             (sizeof(pru_intc_map) / sizeof(struct ch_map)),
@@ -174,9 +191,6 @@ uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 
 #define GPIO_CLEARDATAOUT (0x190 / 4) // For clearing the GPIO registers
 #define GPIO_SETDATAOUT (0x194 / 4)   // For setting the GPIO registers
-
-volatile register uint32_t __R30; /* output register for PRU */
-volatile register uint32_t __R31; /* input register for PRU */
 
 // Delay in cycles
 #define DELAY 0 // 1000
@@ -261,8 +275,7 @@ void latchRows() {
 // gp0 |= 1U << 3;  // g2 (P9-21)
 // gp0 |= 1U << 5;  // b2 (P9-17)
 
-const uint32_t j13_all_g0 =
-    1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
+const uint32_t j13_all_g0 = 1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
 const uint32_t j13_all_g1 = 1U << 18 | 1U << 16;
 const uint32_t j13_all_g2 = 1U << 4 | 1U << 2 | 1U << 3 | 1U << 5;
 
@@ -283,6 +296,8 @@ void setPix(uint32_t cycle, uint32_t pix) {
   //  gpio3[op] = 0;
 }
 
+#include "edma.h"
+
 void main(void) {
   struct pru_rpmsg_transport transport;
   uint16_t src, dst, len;
@@ -295,8 +310,9 @@ void main(void) {
   // Enable PRU0 cycle counter.
   PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 
-  // Clear the system event that the ARM sends.
-  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_FROM_ARM;
+  // Clear the system event mapped to the two input interrupts.
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
 
   // Make sure the Linux drivers are ready for RPMsg communication
   status = &resourceTable.rpmsg_vdev.status;
@@ -304,33 +320,44 @@ void main(void) {
   }
 
   // Initialize the RPMsg transport structure
-  pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0,
-                 &resourceTable.rpmsg_vring1, SYSEVT_TO_ARM, SYSEVT_FROM_ARM);
+  pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0, &resourceTable.rpmsg_vring1, SYSEVT_PRU_TO_ARM,
+                 SYSEVT_ARM_TO_PRU);
 
   // Create the RPMsg channel between the PRU and ARM user
   // space using the *transport structure.
-  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC,
-                           CHAN_PORT) != PRU_RPMSG_SUCCESS) {
+  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC, CHAN_PORT) != PRU_RPMSG_SUCCESS) {
   }
+
+  uled1(LO);
+  uled2(LO);
+  uled3(LO);
+  uled4(LO);
+
+  // @@@ Test!
+  setupEDMA();
+
+  // uled1(HI);
+  // uled2(HI);
+  // uled3(HI);
+  // uled4(HI);
 
   while (1) {
     // Check bit 31 of register R31 to see if the ARM has kicked us
-    if (__R31 & INTERRUPT_CHANNEL_PRU0_MASK) {
+    if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
       // Clear the event status *\/
-      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_FROM_ARM;
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
 
       // Receive all available messages.
-      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) ==
-          PRU_RPMSG_SUCCESS) {
+      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS) {
         break;
       }
     }
   }
+
   // Send the carveout address to the ARM program.
   memcpy(payload, &resourceTable.carveout.pa, 4);
-  while (pru_rpmsg_send(&transport, dst, src, payload, 4) !=
-         PRU_RPMSG_SUCCESS) {
+  while (pru_rpmsg_send(&transport, dst, src, payload, 4) != PRU_RPMSG_SUCCESS) {
   }
 
   // Initialize the carveout (testing)

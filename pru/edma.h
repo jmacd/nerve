@@ -87,8 +87,6 @@ typedef struct {
   edmaParamCcnt ccnt;
 } edmaParam;
 
-#define WORDSZ sizeof(uint32_t)
-
 // CM_PER_BASE is the Clock Module Peripheral base address.
 // TRM 8.1.12.1
 #define CM_PER_BASE ((volatile uint32_t *)(0x44E00000))
@@ -288,78 +286,3 @@ typedef struct {
 // bit 5 is the valid strobe to generate system events with __R31
 #define R31_INTERRUPT_ENABLE (1 << 5)
 #define R31_INTERRUPT_OFFSET 16
-
-// DMA completion interrupt use tpcc_int_pend_po1
-
-// EDMA system event 0 and 1 correspond with pr1_host[7] and pr1_host[6]
-// and pr1_host[0:7] maps to channels 2-9 on the PRU.
-// => EDMA event 0 == PRU channel 9
-// => EDMA event 1 == PRU channel 8
-// For both of these, use the low register set (not the high register set).
-const int dmaChannel = 0;
-const uint32_t dmaChannelMask = (1 << 0);
-
-void setup_dma_channel_zero() {
-  // Map Channel 0 to PaRAM 0
-  // DCHMAP_0 == DMA Channel 0 mapping to PaRAM set number 0.
-  EDMA_BASE[EDMA_DCHMAP_0] = dmaChannel;
-
-  // Setup EDMA region access for Shadow Region 1
-  // DRAE1 == DMA Region Access Enable shadow region 1.
-  EDMA_BASE[EDMA_DRAE1] |= dmaChannelMask;
-
-  // Setup channel to submit to EDMA TC0. Note DMAQNUM0 is for DMAQNUM0
-  // configures the channel controller for channels 0-7, the 0 in
-  // 0xfffffff0 corresponds with "E0" of DMAQNUM0 (TRM 11.4.1.6), i.e., DMA
-  // channel 0 maps to queue 0.
-  EDMA_BASE[EDMA_DMAQNUM_0] &= 0xFFFFFFF0;
-
-  // Clear interrupt and secondary event registers.
-  EDMA_BASE[EDMA_SECR] |= dmaChannelMask;
-  EDMA_BASE[EDMA_ICR] |= dmaChannelMask;
-
-  // Enable channel interrupt.
-  EDMA_BASE[EDMA_IESR] |= dmaChannelMask;
-
-  // Enable channel for an event trigger.
-  EDMA_BASE[EDMA_EESR] |= dmaChannelMask;
-
-  // Clear event missed register.
-  EDMA_BASE[EDMA_EMCR] |= dmaChannelMask;
-}
-
-void start_dma() {
-  uint16_t paramOffset;
-  edmaParam params;
-  volatile edmaParam *ptr;
-
-  // Setup and store PaRAM set for transfer.
-  paramOffset = EDMA_PARAM_OFFSET;
-  paramOffset += ((dmaChannel * EDMA_PARAM_SIZE) / WORDSZ);
-
-  params.lnkrld.link = 0xFFFF;
-  params.lnkrld.bcntrld = 0x0000;
-  params.opt.tcc = dmaChannel;
-  params.opt.tcinten = 1;
-  params.opt.itcchen = 1;
-  params.ccnt.ccnt = 1;
-  params.abcnt.acnt = 100;
-  params.abcnt.bcnt = 1;
-  params.bidx.srcbidx = 1;
-  params.bidx.dstbidx = 1;
-  params.src = 0x4A310000;
-  params.dst = 0x4A310100;
-
-  ptr = (volatile edmaParam *)(EDMA_BASE + paramOffset);
-  *ptr = params;
-
-  // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
-  // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-  __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
-}
-
-void wait_dma() {
-  // Wait for completion interrupt.
-  while (!(EDMA_BASE[EDMA_IPR] & dmaChannelMask)) {
-  }
-}

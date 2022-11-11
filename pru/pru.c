@@ -9,6 +9,8 @@
 volatile register uint32_t __R30; /* output register for PRU */
 volatile register uint32_t __R31; /* input/interrupt register for PRU */
 
+struct pru_rpmsg_transport rpmsg_transport;
+
 // Set in resourceTable.rpmsg_vdev.status when the kernel is ready.
 #define VIRTIO_CONFIG_S_DRIVER_OK ((uint32_t)1 << 2)
 
@@ -173,14 +175,6 @@ struct my_resource_table resourceTable = {
     },
 };
 
-/*
- * Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
- * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
- */
-#define CHAN_NAME "rpmsg-pru"
-#define CHAN_DESC "Channel 30"
-#define CHAN_PORT 30
-
 char payload[RPMSG_BUF_SIZE];
 
 // Set up the pointers to each of the GPIO ports
@@ -298,13 +292,8 @@ void setPix(uint32_t cycle, uint32_t pix) {
 
 #include "edma.h"
 
-void main(void) {
-  struct pru_rpmsg_transport transport;
-  uint16_t src, dst, len;
-  volatile uint8_t *status;
-
-  // Allow OCP master port access by the PRU so the PRU can read external
-  // memories */
+void reset_hardware_state() {
+  // Allow OCP master port access by the PRU.
   CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
   // Enable PRU0 cycle counter.
@@ -314,51 +303,83 @@ void main(void) {
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
 
-  // Make sure the Linux drivers are ready for RPMsg communication
-  status = &resourceTable.rpmsg_vdev.status;
-  while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK)) {
-  }
+  // Enable the EDMA (Transfer controller, Channel controller) clocks.
+  CM_PER_BASE[CM_PER_TPTC0_CLKCTRL] = CM_PER_CLK_ENABLED;
+  CM_PER_BASE[CM_PER_TPCC_CLKCTRL] = CM_PER_CLK_ENABLED;
 
-  // Initialize the RPMsg transport structure
-  pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0, &resourceTable.rpmsg_vring1, SYSEVT_PRU_TO_ARM,
+  // Reset gpio output.
+  const uint32_t allbits = 0xffffffff;
+  gpio0[GPIO_CLEARDATAOUT] = allbits;
+  gpio1[GPIO_CLEARDATAOUT] = allbits;
+  gpio2[GPIO_CLEARDATAOUT] = allbits;
+  gpio3[GPIO_CLEARDATAOUT] = allbits;
+}
+
+void wait_for_virtio_ready() {
+  // Make sure the Linux drivers are ready for RPMsg communication
+  volatile uint8_t *status = &resourceTable.rpmsg_vdev.status;
+  while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK)) {
+    // Wait
+  }
+}
+
+void setup_transport() {
+  // Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
+  // at linux/drivers/rpmsg/rpmsg_pru.c
+  char *const channel_name = "rpmsg-pru";
+  char *const channel_desc = "Channel 30";
+  const int channel_port = 30;
+
+  // Initialize two vrings using system events on dedicated channels.
+  pru_rpmsg_init(&rpmsg_transport, &resourceTable.rpmsg_vring0, &resourceTable.rpmsg_vring1, SYSEVT_PRU_TO_ARM,
                  SYSEVT_ARM_TO_PRU);
 
-  // Create the RPMsg channel between the PRU and ARM user
-  // space using the *transport structure.
-  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC, CHAN_PORT) != PRU_RPMSG_SUCCESS) {
+  // Create the RPMsg channel between the PRU and the ARM.
+  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &rpmsg_transport, channel_name, channel_desc, channel_port) !=
+         PRU_RPMSG_SUCCESS) {
   }
+}
 
-  uled1(LO);
-  uled2(LO);
-  uled3(LO);
-  uled4(LO);
-
-  // @@@ Test!
-  setupEDMA();
-
-  // uled1(HI);
-  // uled2(HI);
-  // uled3(HI);
-  // uled4(HI);
-
+void wait_for_arm() {
   while (1) {
-    // Check bit 31 of register R31 to see if the ARM has kicked us
+    // Check register R31 for the ARM interrupt.
     if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
       // Clear the event status *\/
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
 
       // Receive all available messages.
-      if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS) {
+      if (pru_rpmsg_receive(&rpmsg_transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS) {
         break;
       }
     }
   }
+}
 
+void send_to_arm() {
   // Send the carveout address to the ARM program.
   memcpy(payload, &resourceTable.carveout.pa, 4);
-  while (pru_rpmsg_send(&transport, dst, src, payload, 4) != PRU_RPMSG_SUCCESS) {
+  while (pru_rpmsg_send(&rpmsg_transport, dst, src, payload, 4) != PRU_RPMSG_SUCCESS) {
   }
+}
+
+void main(void) {
+  uint16_t src, dst, len;
+
+  reset_hardware_state();
+
+  wait_for_virtio_ready();
+
+  setup_transport();
+
+  setup_dma_channel_zero();
+
+  // start_dma();
+  // wait_dma();
+
+  wait_for_arm();
+
+  send_to_arm();
 
   // Initialize the carveout (testing)
   uint32_t *start = (uint32_t *)resourceTable.carveout.pa;

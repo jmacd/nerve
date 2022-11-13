@@ -348,20 +348,23 @@ void latchRows() {
 // gp0 |= 1U << 3;  // g2 (P9-21)
 // gp0 |= 1U << 5;  // b2 (P9-17)
 
-const uint32_t j13_all_g0 = 1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
-const uint32_t j13_all_g1 = 1U << 18 | 1U << 16;
-const uint32_t j13_all_g2 = 1U << 4 | 1U << 2 | 1U << 3 | 1U << 5;
+// const uint32_t j13_all_g0 = 1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
+// const uint32_t j13_all_g1 = 1U << 18 | 1U << 16;
+// const uint32_t j13_all_g2 = 1U << 4 | 1U << 2 | 1U << 3 | 1U << 5;
+
+const uint32_t j13_all_g0 = 1U << 30 | 1U << 31;
+const uint32_t j13_all_g1 = 1U << 16;
+const uint32_t j13_all_g2 = 1U << 4 | 1U << 5;
 
 void setPix(uint32_t cycle, uint32_t pix) {
   // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
   int op;
-  // // if (cycle > pix) {
-  // if ((cycle % 32) >= 16) {
-  op = SET;
-  // } else {
-  //   op = CLEAR;
-  // }
+  if (cycle % 32 == 0) {
+    op = SET;
+  } else {
+    op = CLEAR;
+  }
 
   gpio0[op] = j13_all_g0;
   gpio1[op] = j13_all_g1;
@@ -454,8 +457,8 @@ void main(void) {
   send_to_arm();
 
   // Initialize the carveout (testing)
-  uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
-  uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
+  volatile uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
+  volatile uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
 
   // Begin display loop
   uint32_t pix, row, cycle;
@@ -475,9 +478,11 @@ void main(void) {
 
       latchRows();
     }
-    if (start < limit) {
-      *start++ = PRU0_CTRL.CYCLE;
-      *start++ = PRU0_CTRL.STALL;
-    }
+    // if (start < limit) {
+    //*start++ = PRU0_CTRL.CYCLE;
+    //*start++ = PRU0_CTRL.STALL;
+    // frame count
+    (*start) += 1;
+    //}
   }
 }

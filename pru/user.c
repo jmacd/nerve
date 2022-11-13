@@ -91,24 +91,34 @@ int main(void) {
 
   printf("FD is %d\n", fd);
 
-  uint32_t vptr = (uint32_t)mmap(NULL, 1 << 23, PROT_READ | PROT_WRITE,
-                                 MAP_SHARED, fd, addr);
+  uint32_t vptr = (uint32_t)mmap(NULL, 1 << 23, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
 
   printf("Mapped at addr=%x\n", vptr);
 
   volatile uint32_t *first = (uint32_t *)vptr;
-  volatile uint32_t *ptr = first;
-  volatile uint32_t *limit = (uint32_t *)(vptr + (1 << 23));
+  // volatile uint32_t *ptr = first;
+  // volatile uint32_t *limit = (uint32_t *)(vptr + (1 << 23));
 
-  while (ptr < limit) {
-    if (*ptr == 0) {
-      continue;
+  // while (ptr < limit) {
+  //   if (*ptr == 0) {
+  //     continue;
+  //   }
+  //   if (ptr > first) {
+  //     printf("cycles: %d\n", *(ptr + 0) - *(ptr - 2));
+  //     printf("stall: %d\n", *(ptr + 1) - *(ptr - 1));
+  //   }
+  //   ptr += 2;
+  // }
+
+  uint32_t last_value;
+  while (1) {
+    uint32_t current = *first;
+    if (last_value != 0) {
+      uint32_t diff = current - last_value;
+      printf("frames/sec: %.1f\n", (double)diff);
     }
-    if (ptr > first) {
-      printf("cycles: %d\n", *(ptr + 0) - *(ptr - 2));
-      printf("stall: %d\n", *(ptr + 1) - *(ptr - 1));
-    }
-    ptr += 2;
+    last_value = current;
+    sleep(1);
   }
 
   /* Close the rpmsg_pru character device file */

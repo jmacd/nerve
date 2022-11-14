@@ -11,6 +11,7 @@ volatile register uint32_t __R31; /* input/interrupt register for PRU */
 
 #define WORDSZ sizeof(uint32_t)
 
+#include "control.h"
 #include "edma.h"
 
 struct pru_rpmsg_transport rpmsg_transport;
@@ -63,9 +64,6 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 // (From the internet!)
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
 
-#define SET GPIO_SETDATAOUT
-#define CLEAR GPIO_CLEARDATAOUT
-
 // Mapping sysevts to a channel. Each pair contains a sysevt, channel.
 struct ch_map pru_intc_map[] = {
     {SYSEVT_PRU_TO_ARM, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
@@ -81,9 +79,10 @@ struct ch_map pru_intc_map[] = {
 struct my_resource_table {
   struct resource_table base;
 
-  uint32_t offset[3]; /* Should match 'num' in actual definition */
+  uint32_t offset[4]; /* Should match 'num' in actual definition */
 
-  struct fw_rsc_carveout carveout;
+  struct fw_rsc_carveout framebufs;
+  struct fw_rsc_carveout controls;
 
   struct fw_rsc_vdev rpmsg_vdev;
   struct fw_rsc_vdev_vring rpmsg_vring0;
@@ -98,24 +97,35 @@ struct my_resource_table resourceTable = {
     {
         1,    /* Resource table version: only version 1 is supported by the current
                  driver */
-        3,    /* number of entries in the table */
+        4,    /* number of entries in the table */
         0, 0, /* reserved, must be zero */
     },
     /* offsets to entries */
     {
-        offsetof(struct my_resource_table, carveout),
+        offsetof(struct my_resource_table, framebufs),
+        offsetof(struct my_resource_table, controls),
         offsetof(struct my_resource_table, rpmsg_vdev),
         offsetof(struct my_resource_table, pru_ints),
     },
-    /* carveout */
+    /* carveout 1 */
     {
-        (uint32_t)TYPE_CARVEOUT, /* type */
-        (uint32_t)0,             /* da */
-        (uint32_t)0,             /* pa */
-        (uint32_t)1 << 23,       /* len (8MB) */
-        (uint32_t)0,             /* flags */
-        (uint32_t)0,             /* reserved */
+        (uint32_t)TYPE_CARVEOUT,       /* type */
+        (uint32_t)0,                   /* da */
+        (uint32_t)0,                   /* pa */
+        (uint32_t)FRAMEBUF_TOTAL_SIZE, /* len */
+        (uint32_t)0,                   /* flags */
+        (uint32_t)0,                   /* reserved */
         "framebufs",
+    },
+    /* carveout 2 */
+    {
+        (uint32_t)TYPE_CARVEOUT,       /* type */
+        (uint32_t)0,                   /* da */
+        (uint32_t)0,                   /* pa */
+        (uint32_t)CONTROLS_TOTAL_SIZE, /* len */
+        (uint32_t)0,                   /* flags */
+        (uint32_t)0,                   /* reserved */
+        "controls",
     },
 
     /* rpmsg vdev entry */
@@ -189,6 +199,7 @@ uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 
 #define GPIO_CLEARDATAOUT (0x190 / WORDSZ) // For clearing the GPIO registers
 #define GPIO_SETDATAOUT (0x194 / WORDSZ)   // For setting the GPIO registers
+#define GPIO_DATAOUT (0x13C / WORDSZ)      // For setting the GPIO registers
 
 // DMA completion interrupt use tpcc_int_pend_po1
 
@@ -272,7 +283,7 @@ void sleep();
 void setRow(uint32_t row);
 void testPix();
 void toggleClock();
-void setPix(uint32_t cycle, uint32_t pix);
+void setPix(pixel_t *pixel);
 void latchRows();
 
 #define HI 1
@@ -280,9 +291,9 @@ void latchRows();
 
 void set(uint32_t *gpio, int bit, int on) {
   if (on) {
-    gpio[SET] = 1 << bit;
+    gpio[GPIO_SETDATAOUT] = 1 << bit;
   } else {
-    gpio[CLEAR] = 1 << bit;
+    gpio[GPIO_CLEARDATAOUT] = 1 << bit;
   }
 }
 
@@ -310,8 +321,8 @@ void setRow(uint32_t on) {
   uint32_t off = on ^ 0xf;
 
   // Selector bits start at position 12 in gpio1
-  gpio1[SET] = on << 12;
-  gpio1[CLEAR] = off << 12;
+  gpio1[GPIO_SETDATAOUT] = on << 12;
+  gpio1[GPIO_CLEARDATAOUT] = off << 12;
 }
 
 void toggleClock() {
@@ -332,6 +343,8 @@ void latchRows() {
   sleep();
 }
 
+// Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
+
 // J1
 // gp2 |= (1U << 2);  // J1 r1 (P8-gp2)
 // 07 |= (1U << 3);  // J1 g1 (P8-08)
@@ -348,28 +361,11 @@ void latchRows() {
 // gp0 |= 1U << 3;  // g2 (P9-21)
 // gp0 |= 1U << 5;  // b2 (P9-17)
 
-// const uint32_t j13_all_g0 = 1U << 23 | 1U << 26 | 1U << 30 | 1U << 31 | 1U << 3 | 1U << 5;
-// const uint32_t j13_all_g1 = 1U << 18 | 1U << 16;
-// const uint32_t j13_all_g2 = 1U << 4 | 1U << 2 | 1U << 3 | 1U << 5;
-
-const uint32_t j13_all_g0 = 1U << 30 | 1U << 31;
-const uint32_t j13_all_g1 = 1U << 16;
-const uint32_t j13_all_g2 = 1U << 4 | 1U << 5;
-
-void setPix(uint32_t cycle, uint32_t pix) {
-  // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
-
-  int op;
-  if (cycle % 32 == 0) {
-    op = SET;
-  } else {
-    op = CLEAR;
-  }
-
-  gpio0[op] = j13_all_g0;
-  gpio1[op] = j13_all_g1;
-  gpio2[op] = j13_all_g2;
-  //  gpio3[op] = 0;
+void setPix(pixel_t *pixel) {
+  gpio0[GPIO_DATAOUT] = pixel->gpv0;
+  gpio1[GPIO_DATAOUT] = pixel->gpv1;
+  gpio2[GPIO_DATAOUT] = pixel->gpv2;
+  gpio3[GPIO_DATAOUT] = pixel->gpv3;
 }
 
 void reset_hardware_state() {
@@ -436,17 +432,25 @@ void wait_for_arm() {
   }
 }
 
+// Send the carveout addresses to the ARM.
 void send_to_arm() {
-  // Send the carveout address to the ARM program.
-  memcpy(rpmsg_payload, &resourceTable.carveout.pa, 4);
+  memcpy(rpmsg_payload, &resourceTable.controls.pa, 4);
   while (pru_rpmsg_send(&rpmsg_transport, rpmsg_dst, rpmsg_src, rpmsg_payload, 4) != PRU_RPMSG_SUCCESS) {
   }
+}
+
+control_t *setup_controls() {
+  control_t *ctrl = (control_t *)resourceTable.controls.pa;
+  ctrl->framebufs = (uint32_t *)resourceTable.framebufs.pa;
+  return ctrl;
 }
 
 void main(void) {
   reset_hardware_state();
 
   wait_for_virtio_ready();
+
+  control_t *ctrl = setup_controls();
 
   setup_transport();
 
@@ -456,33 +460,29 @@ void main(void) {
 
   send_to_arm();
 
-  // Initialize the carveout (testing)
-  volatile uint32_t *start = (uint32_t *)resourceTable.carveout.pa;
-  volatile uint32_t *limit = (uint32_t *)(resourceTable.carveout.pa + (1 << 23));
-
-  // Begin display loop
-  uint32_t pix, row, cycle;
-
   // start_dma();
   // wait_dma();
 
-  for (cycle = 0; 1; cycle++) {
-    cycle %= 64;
-    for (row = 0; row < 16; row++) {
-      setRow(row);
+  // Begin display loop
+  while (1) {
+    pixel_t *pixptr = (pixel_t *)resourceTable.framebufs.pa;
 
-      for (pix = 0; pix < 64; pix++) {
-        setPix(cycle, pix);
-        toggleClock();
+    uint32_t frame;
+    for (frame = 0; frame < FRAMEBUF_NUM_FRAMES; frame++) {
+
+      uint32_t row;
+      for (row = 0; row < 16; row++) {
+        setRow(row);
+
+        uint32_t pix;
+        for (pix = 0; pix < 64; pix++) {
+          setPix(pixptr++);
+          toggleClock();
+        }
+
+        latchRows();
       }
-
-      latchRows();
+      ctrl->framecount++;
     }
-    // if (start < limit) {
-    //*start++ = PRU0_CTRL.CYCLE;
-    //*start++ = PRU0_CTRL.STALL;
-    // frame count
-    (*start) += 1;
-    //}
   }
 }

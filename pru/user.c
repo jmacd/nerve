@@ -39,6 +39,8 @@
 #include <sys/poll.h>
 #include <unistd.h>
 
+#include "control.h"
+
 #define MAX_BUFFER_SIZE 512
 char readBuf[MAX_BUFFER_SIZE];
 
@@ -95,24 +97,11 @@ int main(void) {
 
   printf("Mapped at addr=%x\n", vptr);
 
-  volatile uint32_t *first = (uint32_t *)vptr;
-  // volatile uint32_t *ptr = first;
-  // volatile uint32_t *limit = (uint32_t *)(vptr + (1 << 23));
-
-  // while (ptr < limit) {
-  //   if (*ptr == 0) {
-  //     continue;
-  //   }
-  //   if (ptr > first) {
-  //     printf("cycles: %d\n", *(ptr + 0) - *(ptr - 2));
-  //     printf("stall: %d\n", *(ptr + 1) - *(ptr - 1));
-  //   }
-  //   ptr += 2;
-  // }
+  control_t *ctrl = (control_t *)vptr;
 
   uint32_t last_value;
   while (1) {
-    uint32_t current = *first;
+    uint32_t current = ctrl->framecount;
     if (last_value != 0) {
       uint32_t diff = current - last_value;
       printf("frames/sec: %.1f\n", (double)diff);

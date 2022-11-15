@@ -66,7 +66,7 @@ int main(void) {
   }
 
   /* The RPMsg channel exists and the character device is opened */
-  printf("Opened %s, sending\n\n", DEVICE_NAME);
+  printf("Opened %s\n", DEVICE_NAME);
 
   /* Send 'hello world!' to the PRU through the RPMsg channel */
   result = write(pollfds[0].fd, "hello world!", 13);
@@ -74,8 +74,6 @@ int main(void) {
     printf("could not send to PRU\n");
     return -1;
   }
-
-  printf("about to read\n");
 
   result = read(pollfds[0].fd, readBuf, MAX_BUFFER_SIZE);
   if (result == 0) {
@@ -90,8 +88,6 @@ int main(void) {
   printf("Closing %s\n", DEVICE_NAME);
 
   int fd = open("/dev/mem", O_RDWR, 0);
-
-  printf("FD is %d\n", fd);
 
   uint32_t vptr = (uint32_t)mmap(NULL, 1 << 23, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
 

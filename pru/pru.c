@@ -211,6 +211,8 @@ uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
+volatile edmaParam *edma_param_entry;
+
 void setup_dma_channel_zero() {
   // Map Channel 0 to PaRAM 0
   // DCHMAP_0 == DMA Channel 0 mapping to PaRAM set number 0.
@@ -238,32 +240,31 @@ void setup_dma_channel_zero() {
 
   // Clear event missed register.
   EDMA_BASE[EDMA_EMCR] |= dmaChannelMask;
-}
-
-void start_dma() {
-  uint16_t paramOffset;
-  edmaParam params;
-  volatile edmaParam *ptr;
 
   // Setup and store PaRAM set for transfer.
-  paramOffset = EDMA_PARAM_OFFSET;
+  uint16_t paramOffset = EDMA_PARAM_OFFSET;
   paramOffset += ((dmaChannel * EDMA_PARAM_SIZE) / WORDSZ);
 
-  params.lnkrld.link = 0xFFFF;
-  params.lnkrld.bcntrld = 0x0000;
-  params.opt.tcc = dmaChannel;
-  params.opt.tcinten = 1;
-  params.opt.itcchen = 1;
-  params.ccnt.ccnt = 1;
-  params.abcnt.acnt = 100;
-  params.abcnt.bcnt = 1;
-  params.bidx.srcbidx = 1;
-  params.bidx.dstbidx = 1;
-  params.src = 0x4A310000;
-  params.dst = 0x4A310100;
+  edma_param_entry = (volatile edmaParam *)(EDMA_BASE + paramOffset);
 
-  ptr = (volatile edmaParam *)(EDMA_BASE + paramOffset);
-  *ptr = params;
+  edma_param_entry->lnkrld.link = 0xFFFF;
+  edma_param_entry->lnkrld.bcntrld = 0x0000;
+  edma_param_entry->opt.tcc = dmaChannel;
+  edma_param_entry->opt.tcinten = 1;
+  edma_param_entry->opt.itcchen = 1;
+  edma_param_entry->ccnt.ccnt = 1;
+  edma_param_entry->abcnt.acnt = 1 << 12;
+  edma_param_entry->abcnt.bcnt = 1;
+  edma_param_entry->bidx.srcbidx = 1;
+  edma_param_entry->bidx.dstbidx = 1;
+  edma_param_entry->src = resourceTable.framebufs.pa;
+  edma_param_entry->dst = 0x4A310000;
+}
+
+pixel_t *frame_banks[2];
+pixel_t *local_banks[2];
+
+void start_dma(uint32_t bank, uint32_t frame, uint32_t part) {
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
@@ -421,7 +422,7 @@ void wait_for_arm() {
     // Check register R31 for the ARM interrupt.
     if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
-      // Clear the event status *\/
+      // Clear the event status
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
 
       // Receive all available messages.
@@ -460,28 +461,54 @@ void main(void) {
 
   send_to_arm();
 
-  // start_dma();
-  // wait_dma();
+  frame_banks[0] = (pixel_t *)(resourceTable.framebufs.pa);
+  frame_banks[1] = (pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);
 
-  // Begin display loop
-  while (1) {
-    pixel_t *pixptr = (pixel_t *)resourceTable.framebufs.pa;
+  local_banks[0] = (pixel_t *)0x10000;
+  local_banks[1] = (pixel_t *)0x11000;
 
+  uint32_t bankno;
+
+  // Fill the first bank.
+  start_dma(1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  wait_dma();
+
+  // For two banks
+  for (bankno = 0; 1; bankno ^= 1) {
+    // For 256 frames per bank
     uint32_t frame;
-    for (frame = 0; frame < FRAMEBUF_NUM_FRAMES; frame++) {
+    for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
 
+      uint32_t part;
       uint32_t row;
-      for (row = 0; row < 16; row++) {
-        setRow(row);
 
-        uint32_t pix;
-        for (pix = 0; pix < 64; pix++) {
-          setPix(pixptr++);
-          toggleClock();
+      // For 4 parts per frame
+      for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
+        pixel_t *pixptr = local_banks[bankno];
+
+        // Start a DMA to fill the next local bank.
+        start_dma(bankno, frame, part);
+
+        // For 4 scans per part
+        uint32_t scan;
+        for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
+
+          setRow(row);
+
+          uint32_t pix;
+          // For 64 pixels width
+          for (pix = 0; pix < 64; pix++) {
+
+            // Set 2 pixels
+            setPix(pixptr++);
+            toggleClock();
+          }
+
+          latchRows();
         }
-
-        latchRows();
+        wait_dma();
       }
+
       ctrl->framecount++;
     }
   }

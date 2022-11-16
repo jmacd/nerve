@@ -9,8 +9,6 @@
 volatile register uint32_t __R30; /* output register for PRU */
 volatile register uint32_t __R31; /* input/interrupt register for PRU */
 
-#define WORDSZ sizeof(uint32_t)
-
 #include "control.h"
 #include "edma.h"
 
@@ -264,17 +262,21 @@ void setup_dma_channel_zero() {
 pixel_t *frame_banks[2];
 pixel_t *local_banks[2];
 
-void start_dma(uint32_t bank, uint32_t frame, uint32_t part) {
+void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
+  edma_param_entry->dst = 0x4A310000 + (localTargetBank * FRAMEBUF_PART_SIZE);
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
 }
 
-void wait_dma() {
+uint32_t wait_dma() {
   // Wait for completion interrupt.
+  uint32_t wait = 0;
   while (!(EDMA_BASE[EDMA_IPR] & dmaChannelMask)) {
+    wait++;
   }
+  return wait;
 }
 
 // Delay in cycles
@@ -470,10 +472,11 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  start_dma(1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
   wait_dma();
 
   // For two banks
+  uint32_t localno = 0;
   for (bankno = 0; 1; bankno ^= 1) {
     // For 256 frames per bank
     uint32_t frame;
@@ -484,16 +487,18 @@ void main(void) {
 
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
-        pixel_t *pixptr = local_banks[bankno];
+        pixel_t *pixptr = local_banks[localno];
+
+        localno ^= 1;
 
         // Start a DMA to fill the next local bank.
-        start_dma(bankno, frame, part);
+        start_dma(localno, bankno, frame, part);
 
         // For 4 scans per part
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
-
           setRow(row);
+          // setRow(0);
 
           uint32_t pix;
           // For 64 pixels width
@@ -506,7 +511,8 @@ void main(void) {
 
           latchRows();
         }
-        wait_dma();
+        // We want to not wait here by inserting sleeps appropriately.
+        ctrl->dma_wait = wait_dma();
       }
 
       ctrl->framecount++;

@@ -1,6 +1,8 @@
 #ifndef __CONTROL_H
 #define __CONTROL_H
 
+#define WORDSZ sizeof(uint32_t)
+
 #define FRAMEBUF_GPIOS 4
 #define FRAMEBUF_SCANS 16
 #define FRAMEBUF_WIDTH 64
@@ -35,9 +37,10 @@
 typedef struct control control_t;
 
 struct control {
-  uint32_t *framebufs;
-
-  uint32_t framecount;
+  volatile uint32_t *framebufs;
+  volatile uint32_t framecount;
+  volatile uint32_t latch_wait;
+  volatile uint32_t dma_wait;
 };
 
 #define CONTROLS_TOTAL_SIZE sizeof(control_t)

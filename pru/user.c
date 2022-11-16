@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/poll.h>
@@ -46,10 +47,26 @@ char readBuf[MAX_BUFFER_SIZE];
 
 #define DEVICE_NAME "/dev/rpmsg_pru30"
 
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
+#define PRINTCFG(x) printf(#x ": %u\n", x)
+
 int main(void) {
   struct pollfd pollfds[1];
   int i;
   int result = 0;
+
+  printf("Configured: %s\n", DEVICE_NAME);
+  PRINTCFG(FRAMEBUF_PIXEL_SIZE);
+  PRINTCFG(FRAMEBUF_SCAN_SIZE);
+  PRINTCFG(FRAMEBUF_FRAME_SIZE);
+  PRINTCFG(FRAMEBUF_PART_SIZE);
+  PRINTCFG(FRAMEBUF_PARTS_PER_FRAME);
+  PRINTCFG(FRAMEBUF_SCANS_PER_PART);
+  PRINTCFG(FRAMEBUF_TOTAL_SIZE);
+  PRINTCFG(FRAMEBUF_BANK_SIZE);
+  PRINTCFG(FRAMEBUF_FRAMES_PER_BANK);
 
   /* Open the rpmsg_pru character device file */
   pollfds[0].fd = open(DEVICE_NAME, O_RDWR);
@@ -71,13 +88,13 @@ int main(void) {
   /* Send 'hello world!' to the PRU through the RPMsg channel */
   result = write(pollfds[0].fd, "hello world!", 13);
   if (result == 0) {
-    printf("could not send to PRU\n");
+    printf("Could not send to PRU\n");
     return -1;
   }
 
   result = read(pollfds[0].fd, readBuf, MAX_BUFFER_SIZE);
   if (result == 0) {
-    printf("could not read from PRU\n");
+    printf("Could not read from PRU\n");
     return -1;
   }
   uint32_t addr;
@@ -89,15 +106,35 @@ int main(void) {
 
   int fd = open("/dev/mem", O_RDWR, 0);
 
-  uint32_t vptr = (uint32_t)mmap(NULL, 1 << 23, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
+  uint32_t ctrlPtr = (uint32_t)mmap(NULL, CONTROLS_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
 
-  printf("Mapped at addr=%x\n", vptr);
+  printf("Control mapped at addr=%x\n", ctrlPtr);
+  control_t *ctrl = (control_t *)ctrlPtr;
 
-  control_t *ctrl = (control_t *)vptr;
+  uint32_t framebufsPtr =
+      (uint32_t)mmap(NULL, FRAMEBUF_TOTAL_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (uint32_t)ctrl->framebufs);
+
+  printf("Framebufs mapped at addr=%x\n", framebufsPtr);
+  uint32_t *framebufs = (uint32_t *)framebufsPtr;
+
+  *framebufs = rand();
+
+  for (int i = 0; i < (FRAMEBUF_TOTAL_SIZE / WORDSZ); i++) {
+    framebufs[i] = rand();
+  }
+
+  // uint32_t *start = framebufs;
+  // uint32_t *limit = framebufs + (FRAMEBUF_TOTAL_SIZE / WORDSZ);
+  // while (start < limit) {
+  //   *start++ = rand();
+  // }
 
   uint32_t last_value;
   while (1) {
     uint32_t current = ctrl->framecount;
+
+    printf("dma_wait: %u\n", ctrl->dma_wait);
+
     if (last_value != 0) {
       uint32_t diff = current - last_value;
       printf("frames/sec: %.1f\n", (double)diff);

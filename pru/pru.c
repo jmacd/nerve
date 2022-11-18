@@ -1,6 +1,7 @@
 #include <pru_rpmsg.h>
 #include <pru_virtio_ids.h>
 #include <rsc_types.h>
+#include <string.h>
 
 #include <am335x/pru_cfg.h>
 #include <am335x/pru_ctrl.h>
@@ -42,6 +43,12 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 // sysevt 63 == tpcc_int_pend_po1
 #define SYSEVT_EDMA_TO_PRU 63
 
+// sysevt 62 == tpcc_errint_pend_po1
+#define SYSEVT_EDMA_CTRL_ERROR_TO_PRU 62
+
+// sysevt 61 == tptc_errint_pend_po1
+#define SYSEVT_EDMA_CHAN_ERROR_TO_PRU 61
+
 // Chanel 2 is the first (of 8) PRU interrupt output channels.
 #define HOST_INTERRUPT_CHANNEL_PRU_TO_ARM 2
 
@@ -64,11 +71,17 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 
 // Mapping sysevts to a channel. Each pair contains a sysevt, channel.
 struct ch_map pru_intc_map[] = {
+    // Interrupts to and from the ARM (virtio).
     {SYSEVT_PRU_TO_ARM, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
     {SYSEVT_ARM_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
 
+    // Interrupts to and from the EDMA.
     {SYSEVT_EDMA_TO_PRU, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
     {SYSEVT_PRU_TO_EDMA, HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA},
+
+    // Error interrupts from EDMA on ARM->PRU channel.
+    {SYSEVT_EDMA_CTRL_ERROR_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+    {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
 };
 
 /* Definition for unused interrupts */
@@ -233,6 +246,10 @@ void setup_dma_channel_zero() {
   // Enable channel interrupt.
   EDMA_BASE[EDMA_IESR] |= dmaChannelMask;
 
+  // Clear channel controller errors.  (Indiscriminantly. TODO: there
+  // are 2 distinct kinds of error here.)
+  EDMA_BASE[EDMA_CCERRCLR] |= 0xffffffff;
+
   // Enable channel for an event trigger.
   EDMA_BASE[EDMA_EESR] |= dmaChannelMask;
 
@@ -250,11 +267,12 @@ void setup_dma_channel_zero() {
   edma_param_entry->opt.tcc = dmaChannel;
   edma_param_entry->opt.tcinten = 1;
   edma_param_entry->opt.itcchen = 1;
+  edma_param_entry->opt.tcc = dmaChannel;
   edma_param_entry->ccnt.ccnt = 1;
-  edma_param_entry->abcnt.acnt = 1 << 12;
-  edma_param_entry->abcnt.bcnt = 1;
-  edma_param_entry->bidx.srcbidx = 1;
-  edma_param_entry->bidx.dstbidx = 1;
+  edma_param_entry->abcnt.acnt = 1 << 8;
+  edma_param_entry->abcnt.bcnt = 16;
+  edma_param_entry->bidx.srcbidx = 1 << 8;
+  edma_param_entry->bidx.dstbidx = 1 << 8;
   edma_param_entry->src = resourceTable.framebufs.pa;
   edma_param_entry->dst = 0x4A310000;
 }
@@ -314,9 +332,7 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
-void sleep() {
-  // __delay_cycles(DELAY);
-}
+void sleep() { __delay_cycles(10); }
 
 void setRow(uint32_t on) {
   // 0xf because 4 address lines.  If this were a x64 panel (1/32
@@ -326,6 +342,8 @@ void setRow(uint32_t on) {
   // Selector bits start at position 12 in gpio1
   gpio1[GPIO_SETDATAOUT] = on << 12;
   gpio1[GPIO_CLEARDATAOUT] = off << 12;
+  __delay_cycles(10);
+  outputEnable(LO);
 }
 
 void toggleClock() {
@@ -341,8 +359,6 @@ void latchRows() {
   latch(HI);
   sleep();
   latch(LO);
-  sleep();
-  outputEnable(LO);
   sleep();
 }
 
@@ -365,10 +381,20 @@ void latchRows() {
 // gp0 |= 1U << 5;  // b2 (P9-17)
 
 void setPix(pixel_t *pixel) {
-  gpio0[GPIO_DATAOUT] = pixel->gpv0;
-  gpio1[GPIO_DATAOUT] = pixel->gpv1;
-  gpio2[GPIO_DATAOUT] = pixel->gpv2;
-  gpio3[GPIO_DATAOUT] = pixel->gpv3;
+  // gpio0[GPIO_DATAOUT] = pixel->gpv0;
+  // gpio1[GPIO_DATAOUT] = pixel->gpv1;
+  // gpio2[GPIO_DATAOUT] = pixel->gpv2;
+  // gpio3[GPIO_DATAOUT] = pixel->gpv3;
+
+  gpio0[GPIO_SETDATAOUT] = pixel->gpv0;
+  gpio1[GPIO_SETDATAOUT] = pixel->gpv1;
+  gpio2[GPIO_SETDATAOUT] = pixel->gpv2;
+  gpio3[GPIO_SETDATAOUT] = pixel->gpv3;
+
+  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0;
+  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1;
+  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2;
+  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3;
 }
 
 void reset_hardware_state() {
@@ -387,11 +413,37 @@ void reset_hardware_state() {
   CM_PER_BASE[CM_PER_TPCC_CLKCTRL] = CM_PER_CLK_ENABLED;
 
   // Reset gpio output.
-  const uint32_t allbits = 0xffffffff;
+  const uint32_t allbits = 0x00000000;
   gpio0[GPIO_CLEARDATAOUT] = allbits;
   gpio1[GPIO_CLEARDATAOUT] = allbits;
   gpio2[GPIO_CLEARDATAOUT] = allbits;
   gpio3[GPIO_CLEARDATAOUT] = allbits;
+
+  // Experimental stuff:
+
+  // Reset the local shared memory buffer.
+  memset((void *)0x10000, 0xff, 0x3000);
+
+  // Turn off CLK, OE, LATCH pins and set the correct row number
+  // for each pixel.
+  uint32_t scan, pix;
+  pixel_t *pixptr = (pixel_t *)0x10000;
+  for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++) {
+    for (pix = 0; pix < 64; pix++) {
+      pixptr->gpv1 &= ~(0xf << 12);
+      pixptr->gpv1 |= scan << 12;
+      pixptr->gpv1 &= ~(1U << 19);
+      pixptr->gpv1 &= ~(1U << 28);
+      pixptr->gpv1 &= ~(1U << 29);
+      pixptr++;
+    }
+  }
+
+  latch(LO);
+  clock(LO);
+  outputEnable(HI);
+  setRow(0);
+  outputEnable(LO);
 }
 
 void wait_for_virtio_ready() {
@@ -424,10 +476,13 @@ void wait_for_arm() {
     // Check register R31 for the ARM interrupt.
     if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
+      // TODO: There are more than one system event: EDMA errors lead
+      // here as well as messages from the ARM.
+
       // Clear the event status
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
 
-      // Receive all available messages.
+      // Receive all available messages from ARM.
       if (pru_rpmsg_receive(&rpmsg_transport, &rpmsg_src, &rpmsg_dst, rpmsg_payload, &rpmsg_len) == PRU_RPMSG_SUCCESS) {
         break;
       }
@@ -472,8 +527,9 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  wait_dma();
+  // @@@
+  // start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  // wait_dma();
 
   // For two banks
   uint32_t localno = 0;
@@ -492,12 +548,13 @@ void main(void) {
         localno ^= 1;
 
         // Start a DMA to fill the next local bank.
-        start_dma(localno, bankno, frame, part);
+        // start_dma(localno, bankno, frame, part);
 
         // For 4 scans per part
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
-          setRow(row);
+          setRow(scan);
+          // __delay_cycles(2);
           // setRow(0);
 
           uint32_t pix;
@@ -512,7 +569,7 @@ void main(void) {
           latchRows();
         }
         // We want to not wait here by inserting sleeps appropriately.
-        ctrl->dma_wait = wait_dma();
+        // ctrl->dma_wait = wait_dma();
       }
 
       ctrl->framecount++;

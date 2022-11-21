@@ -297,9 +297,6 @@ uint32_t wait_dma() {
   return wait;
 }
 
-// Delay in cycles
-#define DELAY 0 // 1000
-
 void sleep();
 void setRow(uint32_t row);
 void testPix();
@@ -332,8 +329,6 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
-void sleep() { __delay_cycles(10); }
-
 void setRow(uint32_t on) {
   // 0xf because 4 address lines.  If this were a x64 panel (1/32
   // scan) use 0x1f for 5 address lines.
@@ -342,59 +337,38 @@ void setRow(uint32_t on) {
   // Selector bits start at position 12 in gpio1
   gpio1[GPIO_SETDATAOUT] = on << 12;
   gpio1[GPIO_CLEARDATAOUT] = off << 12;
-  __delay_cycles(10);
   outputEnable(LO);
 }
 
 void toggleClock() {
-  sleep();
   clock(HI);
-  sleep();
   clock(LO);
 }
 
 void latchRows() {
   outputEnable(HI);
-  sleep();
+
   latch(HI);
-  sleep();
   latch(LO);
-  sleep();
 }
 
-// Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
-
-// J1
-// gp2 |= (1U << 2);  // J1 r1 (P8-07)
-// gp2 |= (1U << 3);  // J1 g1 (P8-08)
-// gp2 |= (1U << 5);  // J1 b1 (P8-09)
-// gp0 |= (1U << 23); // J1 r2 (P8-13)
-// gp2 |= (1U << 4);  // J1 g2 (P8-10)
-// gp0 |= (1U << 26); // J1 b2 (P8-14)
-
-// J3
-// gp0 |= 1U << 30; // r1 (P9-11)
-// gp1 |= 1U << 18; // g1 (P9-14)
-// gp0 |= 1U << 31; // b1 (P9-13)
-// gp1 |= 1U << 16; // r2 (P9-15)
-// gp0 |= 1U << 3;  // g2 (P9-21)
-// gp0 |= 1U << 5;  // b2 (P9-17)
-
 void setPix(pixel_t *pixel) {
-  // gpio0[GPIO_DATAOUT] = pixel->gpv0;
-  // gpio1[GPIO_DATAOUT] = pixel->gpv1;
-  // gpio2[GPIO_DATAOUT] = pixel->gpv2;
-  // gpio3[GPIO_DATAOUT] = pixel->gpv3;
+  // Faster w/ a single write, but noisy!
+  // gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
+  // gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
+  // gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
+  // gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
 
-  gpio0[GPIO_SETDATAOUT] = pixel->gpv0;
-  gpio1[GPIO_SETDATAOUT] = pixel->gpv1;
-  gpio2[GPIO_SETDATAOUT] = pixel->gpv2;
-  gpio3[GPIO_SETDATAOUT] = pixel->gpv3;
+  // Less noise from the box when I use two writes.
+  gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
+  gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
+  gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
+  gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
 
-  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0;
-  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1;
-  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2;
-  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3;
+  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
+  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
+  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
+  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
 }
 
 void reset_hardware_state() {
@@ -422,19 +396,36 @@ void reset_hardware_state() {
   // Experimental stuff:
 
   // Reset the local shared memory buffer.
-  memset((void *)0x10000, 0xff, 0x3000);
+  memset((void *)0x10000, 0, 0x3000);
 
   // Turn off CLK, OE, LATCH pins and set the correct row number
   // for each pixel.
-  uint32_t scan, pix;
+  uint32_t pix, row;
   pixel_t *pixptr = (pixel_t *)0x10000;
-  for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++) {
+
+  // 12 rows filled in 12KB shared PRU ram
+  for (row = 0; row < (3 * FRAMEBUF_SCANS_PER_PART); row++) {
     for (pix = 0; pix < 64; pix++) {
-      pixptr->gpv1 &= ~(0xf << 12);
-      pixptr->gpv1 |= scan << 12;
-      pixptr->gpv1 &= ~(1U << 19);
-      pixptr->gpv1 &= ~(1U << 28);
-      pixptr->gpv1 &= ~(1U << 29);
+
+      pixptr->gpv1.bits.rowSelect = row;
+      pixptr->gpv1.bits.inputClock = 0;
+      pixptr->gpv1.bits.outputEnable = 0;
+      pixptr->gpv1.bits.inputLatch = 0;
+
+      pixptr->gpv0.bits.j3_r1 = 1;
+      pixptr->gpv1.bits.j3_g1 = 1;
+      pixptr->gpv0.bits.j3_b1 = 1;
+      pixptr->gpv1.bits.j3_r2 = 1;
+      pixptr->gpv0.bits.j3_g2 = 1;
+      pixptr->gpv0.bits.j3_b2 = 1;
+
+      pixptr->gpv2.bits.j1_r1 = 1;
+      pixptr->gpv2.bits.j1_g1 = 1;
+      pixptr->gpv2.bits.j1_b1 = 1;
+      pixptr->gpv0.bits.j1_r2 = 1;
+      pixptr->gpv2.bits.j1_g2 = 1;
+      pixptr->gpv0.bits.j1_b2 = 1;
+
       pixptr++;
     }
   }
@@ -527,7 +518,6 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  // @@@
   // start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
   // wait_dma();
 
@@ -543,6 +533,7 @@ void main(void) {
 
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
+
         pixel_t *pixptr = local_banks[localno];
 
         localno ^= 1;
@@ -553,9 +544,9 @@ void main(void) {
         // For 4 scans per part
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
-          setRow(scan);
-          // __delay_cycles(2);
-          // setRow(0);
+
+          // TODO should be row, but we want it in the GPIO registers from DMA
+          // setRow(scan);
 
           uint32_t pix;
           // For 64 pixels width

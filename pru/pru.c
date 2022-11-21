@@ -354,21 +354,21 @@ void latchRows() {
 
 void setPix(pixel_t *pixel) {
   // Faster w/ a single write, but noisy!
-  // gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
-  // gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
-  // gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
-  // gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
+  gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
+  gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
+  gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
+  gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
 
   // Less noise from the box when I use two writes.
-  gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
-  gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
-  gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
-  gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
+  // gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
+  // gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
+  // gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
+  // gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
 
-  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
-  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
-  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
-  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
+  // gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
+  // gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
+  // gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
+  // gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
 }
 
 void reset_hardware_state() {
@@ -432,6 +432,7 @@ void init_test_buffer() {
     }
   }
 
+  memset((void *)resourceTable.framebufs.pa, 0, FRAMEBUF_TOTAL_SIZE);
   uint32_t bankno;
   for (bankno = 0; bankno < 2; bankno++) {
     // For 256 frames per bank
@@ -451,18 +452,18 @@ void init_test_buffer() {
           pixptr->gpv1.bits.inputClock = 0;
           pixptr->gpv1.bits.outputEnable = 0;
           pixptr->gpv1.bits.inputLatch = 0;
-          pixptr->gpv0.bits.j3_r1 = 0;
-          pixptr->gpv1.bits.j3_g1 = 1;
-          pixptr->gpv0.bits.j3_b1 = 1;
+          pixptr->gpv0.bits.j3_r1 = 1;
+          pixptr->gpv1.bits.j3_g1 = 0;
+          pixptr->gpv0.bits.j3_b1 = 0;
           pixptr->gpv1.bits.j3_r2 = 0;
-          pixptr->gpv0.bits.j3_g2 = 1;
+          pixptr->gpv0.bits.j3_g2 = 0;
           pixptr->gpv0.bits.j3_b2 = 1;
-          pixptr->gpv2.bits.j1_r1 = 0;
-          pixptr->gpv2.bits.j1_g1 = 1;
-          pixptr->gpv2.bits.j1_b1 = 1;
+          pixptr->gpv2.bits.j1_r1 = 1;
+          pixptr->gpv2.bits.j1_g1 = 0;
+          pixptr->gpv2.bits.j1_b1 = 0;
           pixptr->gpv0.bits.j1_r2 = 0;
           pixptr->gpv2.bits.j1_g2 = 1;
-          pixptr->gpv0.bits.j1_b2 = 1;
+          pixptr->gpv0.bits.j1_b2 = 0;
           pixptr++;
         }
       }
@@ -530,8 +531,6 @@ control_t *setup_controls() {
 void main(void) {
   reset_hardware_state();
 
-  init_test_buffer();
-
   wait_for_virtio_ready();
 
   control_t *ctrl = setup_controls();
@@ -549,6 +548,8 @@ void main(void) {
 
   local_banks[0] = (pixel_t *)0x10000;
   local_banks[1] = (pixel_t *)0x11000;
+
+  init_test_buffer();
 
   uint32_t bankno;
 

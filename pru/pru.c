@@ -365,8 +365,8 @@ void latchRows() {
 // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
 // J1
-// gp2 |= (1U << 2);  // J1 r1 (P8-gp2)
-// 07 |= (1U << 3);  // J1 g1 (P8-08)
+// gp2 |= (1U << 2);  // J1 r1 (P8-07)
+// gp2 |= (1U << 3);  // J1 g1 (P8-08)
 // gp2 |= (1U << 5);  // J1 b1 (P8-09)
 // gp0 |= (1U << 23); // J1 r2 (P8-13)
 // gp2 |= (1U << 4);  // J1 g2 (P8-10)

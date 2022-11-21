@@ -393,11 +393,17 @@ void reset_hardware_state() {
   gpio2[GPIO_CLEARDATAOUT] = allbits;
   gpio3[GPIO_CLEARDATAOUT] = allbits;
 
-  // Experimental stuff:
-
   // Reset the local shared memory buffer.
   memset((void *)0x10000, 0, 0x3000);
 
+  latch(LO);
+  clock(LO);
+  outputEnable(HI);
+  setRow(0);
+  outputEnable(LO);
+}
+
+void init_test_buffer() {
   // Turn off CLK, OE, LATCH pins and set the correct row number
   // for each pixel.
   uint32_t pix, row;
@@ -406,35 +412,62 @@ void reset_hardware_state() {
   // 12 rows filled in 12KB shared PRU ram
   for (row = 0; row < (3 * FRAMEBUF_SCANS_PER_PART); row++) {
     for (pix = 0; pix < 64; pix++) {
-
       pixptr->gpv1.bits.rowSelect = row;
       pixptr->gpv1.bits.inputClock = 0;
       pixptr->gpv1.bits.outputEnable = 0;
       pixptr->gpv1.bits.inputLatch = 0;
-
       pixptr->gpv0.bits.j3_r1 = 1;
       pixptr->gpv1.bits.j3_g1 = 1;
       pixptr->gpv0.bits.j3_b1 = 1;
       pixptr->gpv1.bits.j3_r2 = 1;
       pixptr->gpv0.bits.j3_g2 = 1;
       pixptr->gpv0.bits.j3_b2 = 1;
-
       pixptr->gpv2.bits.j1_r1 = 1;
       pixptr->gpv2.bits.j1_g1 = 1;
       pixptr->gpv2.bits.j1_b1 = 1;
       pixptr->gpv0.bits.j1_r2 = 1;
       pixptr->gpv2.bits.j1_g2 = 1;
       pixptr->gpv0.bits.j1_b2 = 1;
-
       pixptr++;
     }
   }
 
-  latch(LO);
-  clock(LO);
-  outputEnable(HI);
-  setRow(0);
-  outputEnable(LO);
+  uint32_t bankno;
+  for (bankno = 0; bankno < 2; bankno++) {
+    // For 256 frames per bank
+    uint32_t frame;
+    pixel_t *pixptr = (pixel_t *)(resourceTable.framebufs.pa + bankno * FRAMEBUF_BANK_SIZE);
+
+    for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
+
+      uint32_t row;
+
+      for (row = 0; row < FRAMEBUF_SCANS; row++) {
+        uint32_t pix;
+
+        // For 64 pixels width
+        for (pix = 0; pix < 64; pix++) {
+          pixptr->gpv1.bits.rowSelect = row;
+          pixptr->gpv1.bits.inputClock = 0;
+          pixptr->gpv1.bits.outputEnable = 0;
+          pixptr->gpv1.bits.inputLatch = 0;
+          pixptr->gpv0.bits.j3_r1 = 0;
+          pixptr->gpv1.bits.j3_g1 = 1;
+          pixptr->gpv0.bits.j3_b1 = 1;
+          pixptr->gpv1.bits.j3_r2 = 0;
+          pixptr->gpv0.bits.j3_g2 = 1;
+          pixptr->gpv0.bits.j3_b2 = 1;
+          pixptr->gpv2.bits.j1_r1 = 0;
+          pixptr->gpv2.bits.j1_g1 = 1;
+          pixptr->gpv2.bits.j1_b1 = 1;
+          pixptr->gpv0.bits.j1_r2 = 0;
+          pixptr->gpv2.bits.j1_g2 = 1;
+          pixptr->gpv0.bits.j1_b2 = 1;
+          pixptr++;
+        }
+      }
+    }
+  }
 }
 
 void wait_for_virtio_ready() {
@@ -497,6 +530,8 @@ control_t *setup_controls() {
 void main(void) {
   reset_hardware_state();
 
+  init_test_buffer();
+
   wait_for_virtio_ready();
 
   control_t *ctrl = setup_controls();
@@ -526,6 +561,10 @@ void main(void) {
   for (bankno = 0; 1; bankno ^= 1) {
     // For 256 frames per bank
     uint32_t frame;
+
+    // @@@ YES!
+    pixel_t *pixptr = frame_banks[bankno];
+
     for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
 
       uint32_t part;
@@ -534,7 +573,7 @@ void main(void) {
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
 
-        pixel_t *pixptr = local_banks[localno];
+        // pixel_t *pixptr = local_banks[localno];
 
         localno ^= 1;
 

@@ -281,20 +281,31 @@ pixel_t *frame_banks[2];
 pixel_t *local_banks[2];
 
 void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
+
+  if (currentBank == 1 && currentFrame == FRAMEBUF_FRAMES_PER_BANK - 1 && currentPart == FRAMEBUF_PARTS_PER_FRAME - 1) {
+    currentBank = 0;
+    currentFrame = 0;
+    currentPart = 0;
+  }
   edma_param_entry->dst = 0x4A310000 + (localTargetBank * FRAMEBUF_PART_SIZE);
+  edma_param_entry->src = resourceTable.framebufs.pa + (currentBank * FRAMEBUF_BANK_SIZE) +
+                          (currentFrame * FRAMEBUF_FRAME_SIZE) + ((currentPart + 1) * FRAMEBUF_PART_SIZE);
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-  __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+  // __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+  memcpy(edma_param_entry->dst, edma_param_entry->src, FRAMEBUF_PART_SIZE);
 }
 
 uint32_t wait_dma() {
-  // Wait for completion interrupt.
-  uint32_t wait = 0;
-  while (!(EDMA_BASE[EDMA_IPR] & dmaChannelMask)) {
-    wait++;
-  }
-  return wait;
+  // // Wait for completion interrupt.
+  // uint32_t wait = 0;
+  // while (!(EDMA_BASE[EDMA_IPR] & dmaChannelMask)) {
+  //   wait++;
+  // }
+  // return wait;
+
+  return 0;
 }
 
 void sleep();
@@ -354,21 +365,21 @@ void latchRows() {
 
 void setPix(pixel_t *pixel) {
   // Faster w/ a single write, but noisy!
-  gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
-  gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
-  gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
-  gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
+  // gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
+  // gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
+  // gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
+  // gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
 
   // Less noise from the box when I use two writes.
-  // gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
-  // gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
-  // gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
-  // gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
+  gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
+  gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
+  gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
+  gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
 
-  // gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
-  // gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
-  // gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
-  // gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
+  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
+  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
+  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
+  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
 }
 
 void reset_hardware_state() {
@@ -416,17 +427,17 @@ void init_test_buffer() {
       pixptr->gpv1.bits.inputClock = 0;
       pixptr->gpv1.bits.outputEnable = 0;
       pixptr->gpv1.bits.inputLatch = 0;
-      pixptr->gpv0.bits.j3_r1 = 1;
-      pixptr->gpv1.bits.j3_g1 = 1;
+      pixptr->gpv0.bits.j3_r1 = 0;
+      pixptr->gpv1.bits.j3_g1 = 0;
       pixptr->gpv0.bits.j3_b1 = 1;
-      pixptr->gpv1.bits.j3_r2 = 1;
-      pixptr->gpv0.bits.j3_g2 = 1;
+      pixptr->gpv1.bits.j3_r2 = 0;
+      pixptr->gpv0.bits.j3_g2 = 0;
       pixptr->gpv0.bits.j3_b2 = 1;
-      pixptr->gpv2.bits.j1_r1 = 1;
-      pixptr->gpv2.bits.j1_g1 = 1;
+      pixptr->gpv2.bits.j1_r1 = 0;
+      pixptr->gpv2.bits.j1_g1 = 0;
       pixptr->gpv2.bits.j1_b1 = 1;
-      pixptr->gpv0.bits.j1_r2 = 1;
-      pixptr->gpv2.bits.j1_g2 = 1;
+      pixptr->gpv0.bits.j1_r2 = 0;
+      pixptr->gpv2.bits.j1_g2 = 0;
       pixptr->gpv0.bits.j1_b2 = 1;
       pixptr++;
     }
@@ -554,8 +565,8 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  // start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  // wait_dma();
+  start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  wait_dma();
 
   // For two banks
   uint32_t localno = 0;
@@ -564,7 +575,7 @@ void main(void) {
     uint32_t frame;
 
     // @@@ YES!
-    pixel_t *pixptr = frame_banks[bankno];
+    // pixel_t *pixptr = frame_banks[bankno];
 
     for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
 
@@ -574,12 +585,12 @@ void main(void) {
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
 
-        // pixel_t *pixptr = local_banks[localno];
+        pixel_t *pixptr = local_banks[localno];
 
         localno ^= 1;
 
         // Start a DMA to fill the next local bank.
-        // start_dma(localno, bankno, frame, part);
+        start_dma(localno, bankno, frame, part);
 
         // For 4 scans per part
         uint32_t scan;
@@ -600,7 +611,7 @@ void main(void) {
           latchRows();
         }
         // We want to not wait here by inserting sleeps appropriately.
-        // ctrl->dma_wait = wait_dma();
+        ctrl->dma_wait = wait_dma();
       }
 
       ctrl->framecount++;

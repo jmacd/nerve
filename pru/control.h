@@ -1,6 +1,8 @@
 #ifndef __CONTROL_H
 #define __CONTROL_H
 
+#define PRU_L4_FAST_SHARED_PRUSS_MEM 0x4a310000
+
 // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
 
 // J1
@@ -57,7 +59,6 @@ typedef struct control control_t;
 struct control {
   volatile uint32_t *framebufs;
   volatile uint32_t framecount;
-  volatile uint32_t latch_wait;
   volatile uint32_t dma_wait;
 };
 

@@ -208,9 +208,25 @@ uint32_t *gpio1 = (uint32_t *)0x4804c000; // GPIO Bank 1
 uint32_t *gpio2 = (uint32_t *)0x481ac000; // GPIO Bank 2
 uint32_t *gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 
+#define HI 1
+#define LO 0
+
 #define GPIO_CLEARDATAOUT (0x190 / WORDSZ) // For clearing the GPIO registers
 #define GPIO_SETDATAOUT (0x194 / WORDSZ)   // For setting the GPIO registers
 #define GPIO_DATAOUT (0x13C / WORDSZ)      // For setting the GPIO registers
+
+void set(uint32_t *gpio, int bit, int on) {
+  if (on) {
+    gpio[GPIO_SETDATAOUT] = 1 << bit;
+  } else {
+    gpio[GPIO_CLEARDATAOUT] = 1 << bit;
+  }
+}
+
+void uled1(int val) { set(gpio1, 21, val); }
+void uled2(int val) { set(gpio1, 22, val); }
+void uled3(int val) { set(gpio1, 23, val); }
+void uled4(int val) { set(gpio1, 24, val); }
 
 // DMA completion interrupt use tpcc_int_pend_po1
 
@@ -265,47 +281,68 @@ void setup_dma_channel_zero() {
   edma_param_entry->lnkrld.link = 0xFFFF;
   edma_param_entry->lnkrld.bcntrld = 0x0000;
   edma_param_entry->opt.tcc = dmaChannel;
+
+  // Transfer complete interrupt enable.
   edma_param_entry->opt.tcinten = 1;
-  edma_param_entry->opt.itcchen = 1;
+
+  // Intermediate transfer completion chaining enable.
+  // not needed, used for splitting the transfer
+  // edma_param_entry->opt.itcchen = 1;
   edma_param_entry->opt.tcc = dmaChannel;
+
   edma_param_entry->ccnt.ccnt = 1;
-  edma_param_entry->abcnt.acnt = 1 << 8;
-  edma_param_entry->abcnt.bcnt = 16;
-  edma_param_entry->bidx.srcbidx = 1 << 8;
-  edma_param_entry->bidx.dstbidx = 1 << 8;
+  edma_param_entry->abcnt.acnt = 1 << 12;
+  edma_param_entry->abcnt.bcnt = 1;
+  edma_param_entry->bidx.srcbidx = 0;
+  edma_param_entry->bidx.dstbidx = 0;
   edma_param_entry->src = resourceTable.framebufs.pa;
-  edma_param_entry->dst = 0x4A310000;
+  edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM;
 }
 
 pixel_t *frame_banks[2];
 pixel_t *local_banks[2];
 
 void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
-
   if (currentBank == 1 && currentFrame == FRAMEBUF_FRAMES_PER_BANK - 1 && currentPart == FRAMEBUF_PARTS_PER_FRAME - 1) {
     currentBank = 0;
     currentFrame = 0;
     currentPart = 0;
+  } else {
+    currentPart++;
   }
-  edma_param_entry->dst = 0x4A310000 + (localTargetBank * FRAMEBUF_PART_SIZE);
+  edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (localTargetBank * FRAMEBUF_PART_SIZE);
   edma_param_entry->src = resourceTable.framebufs.pa + (currentBank * FRAMEBUF_BANK_SIZE) +
-                          (currentFrame * FRAMEBUF_FRAME_SIZE) + ((currentPart + 1) * FRAMEBUF_PART_SIZE);
+                          (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
 
+#if 0
+  // The equivalent blocking memory transfer:
+  memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
+#else
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-  // __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
-  memcpy(edma_param_entry->dst, edma_param_entry->src, FRAMEBUF_PART_SIZE);
+  __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+#endif
 }
 
 uint32_t wait_dma() {
-  // // Wait for completion interrupt.
-  // uint32_t wait = 0;
-  // while (!(EDMA_BASE[EDMA_IPR] & dmaChannelMask)) {
-  //   wait++;
-  // }
-  // return wait;
-
+#if 0
   return 0;
+#else
+  uint32_t wait = 0;
+
+  if (EDMA_BASE[EDMA_CCERR] != 0) {
+    __halt();
+  }
+
+  while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
+    //__halt();
+    wait++;
+  }
+
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
+
+  return wait;
+#endif
 }
 
 void sleep();
@@ -314,22 +351,6 @@ void testPix();
 void toggleClock();
 void setPix(pixel_t *pixel);
 void latchRows();
-
-#define HI 1
-#define LO 0
-
-void set(uint32_t *gpio, int bit, int on) {
-  if (on) {
-    gpio[GPIO_SETDATAOUT] = 1 << bit;
-  } else {
-    gpio[GPIO_CLEARDATAOUT] = 1 << bit;
-  }
-}
-
-void uled1(int val) { set(gpio1, 21, val); }
-void uled2(int val) { set(gpio1, 22, val); }
-void uled3(int val) { set(gpio1, 23, val); }
-void uled4(int val) { set(gpio1, 24, val); }
 
 void clock(int val) { set(gpio1, 19, val); }
 void latch(int val) { set(gpio1, 29, val); }
@@ -361,25 +382,28 @@ void latchRows() {
 
   latch(HI);
   latch(LO);
+
+  // Slow down to see what's happening.
+  __delay_cycles(60000000);
 }
 
 void setPix(pixel_t *pixel) {
-  // Faster w/ a single write, but noisy!
-  // gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
-  // gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
-  // gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
-  // gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
+  // Faster w/ a single write, but can be noisy.
+  gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
+  gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
+  gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
+  gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
 
   // Less noise from the box when I use two writes.
-  gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
-  gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
-  gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
-  gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
+  // gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
+  // gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
+  // gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
+  // gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
 
-  gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
-  gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
-  gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
-  gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
+  // gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
+  // gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
+  // gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
+  // gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
 }
 
 void reset_hardware_state() {
@@ -467,8 +491,8 @@ void init_test_buffer() {
           pixptr->gpv1.bits.j3_g1 = 0;
           pixptr->gpv0.bits.j3_b1 = 0;
           pixptr->gpv1.bits.j3_r2 = 0;
-          pixptr->gpv0.bits.j3_g2 = 0;
-          pixptr->gpv0.bits.j3_b2 = 1;
+          pixptr->gpv0.bits.j3_g2 = 1;
+          pixptr->gpv0.bits.j3_b2 = 0;
           pixptr->gpv2.bits.j1_r1 = 1;
           pixptr->gpv2.bits.j1_g1 = 0;
           pixptr->gpv2.bits.j1_b1 = 0;
@@ -574,13 +598,10 @@ void main(void) {
     // For 256 frames per bank
     uint32_t frame;
 
-    // @@@ YES!
-    // pixel_t *pixptr = frame_banks[bankno];
-
     for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
 
+      uint32_t row = 0;
       uint32_t part;
-      uint32_t row;
 
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
@@ -596,8 +617,7 @@ void main(void) {
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
 
-          // TODO should be row, but we want it in the GPIO registers from DMA
-          // setRow(scan);
+          setRow(row);
 
           uint32_t pix;
           // For 64 pixels width

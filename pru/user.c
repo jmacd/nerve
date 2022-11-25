@@ -65,13 +65,17 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (localTargetBank * FRAMEBUF_PART_SIZE);
   src = (currentBank * FRAMEBUF_BANK_SIZE) + (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
 
-  printf("copy dst %x src %x\n", dst, src);
+  printf("copy dst 0x%x src 0x%x size 0x%x\n", dst, src, FRAMEBUF_PART_SIZE);
 }
 
 void demoPrint(void) {
   // For two banks
   uint32_t localno = 0;
   uint32_t bankno;
+
+  start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+
+  uint32_t pixaddr = 0;
 
   for (bankno = 0; bankno < 2; bankno++) {
     // For 256 frames per bank
@@ -85,8 +89,6 @@ void demoPrint(void) {
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
 
-        // pixel_t *pixptr = local_banks[localno];
-
         localno ^= 1;
 
         // Start a DMA to fill the next local bank.
@@ -97,16 +99,18 @@ void demoPrint(void) {
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
 
-          printf("start row %u\n", row);
+          printf("start row %u addr 0x%x\n", row, pixaddr);
 
           uint32_t pix;
           for (pix = 0; pix < 64; pix++) {
-            // pixptr++;
+            pixaddr += 16;
           }
         }
       }
     }
   }
+
+  printf("finish addr 0x%x\n", pixaddr);
 }
 
 int main(void) {

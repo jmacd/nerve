@@ -243,41 +243,43 @@ typedef struct {
 
 // 810h to 82Ch MPPA_0 to MPPA_7 Memory Protection Page Attribute Registers Section 11.4.1.90
 
-#define EDMA_ER (0x1000 / WORDSZ)    // Event Register Section 11.4.1.91
-#define EDMA_ERH (0x1004 / WORDSZ)   // Event Register High Section 11.4.1.92
-#define EDMA_ECR (0x1008 / WORDSZ)   // Event Clear Register Section 11.4.1.93
-#define EDMA_ECRH (0x100C / WORDSZ)  // Event Clear Register High Section 11.4.1.94
-#define EDMA_ESR (0x1010 / WORDSZ)   // Event Set Register Section 11.4.1.95
-#define EDMA_ESRH (0x1014 / WORDSZ)  // Event Set Register High Section 11.4.1.96
-#define EDMA_CER (0x1018 / WORDSZ)   // Chained Event Register Section 11.4.1.97
-#define EDMA_CERH (0x101C / WORDSZ)  // Chained Event Register High Section 11.4.1.98
-#define EDMA_EER (0x1020 / WORDSZ)   // Event Enable Register Section 11.4.1.99
-#define EDMA_EERH (0x1024 / WORDSZ)  // Event Enable Register High Section 11.4.1.100
-#define EDMA_EECR (0x1028 / WORDSZ)  // Event Enable Clear Register Section 11.4.1.101
-#define EDMA_EECRH (0x102C / WORDSZ) // Event Enable Clear Register High Section 11.4.1.102
-#define EDMA_EESR (0x1030 / WORDSZ)  // Event Enable Set Register Section 11.4.1.103
-#define EDMA_EESRH (0x1034 / WORDSZ) // Event Enable Set Register High Section 11.4.1.104
-#define EDMA_SER (0x1038 / WORDSZ)   // Secondary Event Register Section 11.4.1.105
-#define EDMA_SERH (0x103C / WORDSZ)  // Secondary Event Register High Section 11.4.1.106
-#define EDMA_SECR (0x1040 / WORDSZ)  // Secondary Event Clear Register Section 11.4.1.107
-#define EDMA_SECRH (0x1044 / WORDSZ) // Secondary Event Clear Register High Section 11.4.1.108
-#define EDMA_IER (0x1050 / WORDSZ)   // Interrupt Enable Register Section 11.4.1.109
-#define EDMA_IERH (0x1054 / WORDSZ)  // Interrupt Enable Register High Section 11.4.1.110
-#define EDMA_IECR (0x1058 / WORDSZ)  // Interrupt Enable Clear Register Section 11.4.1.111
-#define EDMA_IECRH (0x105C / WORDSZ) // Interrupt Enable Clear Register High Section 11.4.1.112
-#define EDMA_IESR (0x1060 / WORDSZ)  // Interrupt Enable Set Register Section 11.4.1.113
-#define EDMA_IESRH (0x1064 / WORDSZ) // Interrupt Enable Set Register High Section 11.4.1.114
-#define EDMA_IPR (0x1068 / WORDSZ)   // Interrupt Pending Register Section 11.4.1.115
-#define EDMA_IPRH (0x106C / WORDSZ)  // Interrupt Pending Register High Section 11.4.1.116
-#define EDMA_ICR (0x1070 / WORDSZ)   // Interrupt Clear Register Section 11.4.1.117
-#define EDMA_ICRH (0x1074 / WORDSZ)  // Interrupt Clear Register High Section 11.4.1.118
-#define EDMA_IEVAL (0x1078 / WORDSZ) // Interrupt Evaluate Register Section 11.4.1.119
-#define EDMA_QER (0x1080 / WORDSZ)   // QDMA Event Register Section 11.4.1.120
-#define EDMA_QEER (0x1084 / WORDSZ)  // QDMA Event Enable Register Section 11.4.1.121
-#define EDMA_QEECR (0x1088 / WORDSZ) // QDMA Event Enable Clear Register Section 11.4.1.122
-#define EDMA_QEESR (0x108C / WORDSZ) // QDMA Event Enable Set Register Section 11.4.1.123
-#define EDMA_QSER (0x1090 / WORDSZ)  // QDMA Secondary Event Register Section 11.4.1.124
-#define EDMA_QSECR (0x1094 / WORDSZ) // QDMA Secondary Event Clear Register Section 11.4.1.125
+#define EDMAREG_ER 0x00    // Event Register Section 11.4.1.91
+#define EDMAREG_ERH 0x04   // Event Register High Section 11.4.1.92
+#define EDMAREG_ECR 0x08   // Event Clear Register Section 11.4.1.93
+#define EDMAREG_ECRH 0x0C  // Event Clear Register High Section 11.4.1.94
+#define EDMAREG_ESR 0x10   // Event Set Register Section 11.4.1.95
+#define EDMAREG_ESRH 0x14  // Event Set Register High Section 11.4.1.96
+#define EDMAREG_CER 0x18   // Chained Event Register Section 11.4.1.97
+#define EDMAREG_CERH 0x1C  // Chained Event Register High Section 11.4.1.98
+#define EDMAREG_EER 0x20   // Event Enable Register Section 11.4.1.99
+#define EDMAREG_EERH 0x24  // Event Enable Register High Section 11.4.1.100
+#define EDMAREG_EECR 0x28  // Event Enable Clear Register Section 11.4.1.101
+#define EDMAREG_EECRH 0x2C // Event Enable Clear Register High Section 11.4.1.102
+#define EDMAREG_EESR 0x30  // Event Enable Set Register Section 11.4.1.103
+#define EDMAREG_EESRH 0x34 // Event Enable Set Register High Section 11.4.1.104
+#define EDMAREG_SER 0x38   // Secondary Event Register Section 11.4.1.105
+#define EDMAREG_SERH 0x3C  // Secondary Event Register High Section 11.4.1.106
+#define EDMAREG_SECR 0x40  // Secondary Event Clear Register Section 11.4.1.107
+#define EDMAREG_SECRH 0x44 // Secondary Event Clear Register High Section 11.4.1.108
+#define EDMAREG_IER 0x50   // Interrupt Enable Register Section 11.4.1.109
+#define EDMAREG_IERH 0x54  // Interrupt Enable Register High Section 11.4.1.110
+#define EDMAREG_IECR 0x58  // Interrupt Enable Clear Register Section 11.4.1.111
+#define EDMAREG_IECRH 0x5C // Interrupt Enable Clear Register High Section 11.4.1.112
+#define EDMAREG_IESR 0x60  // Interrupt Enable Set Register Section 11.4.1.113
+#define EDMAREG_IESRH 0x64 // Interrupt Enable Set Register High Section 11.4.1.114
+#define EDMAREG_IPR 0x68   // Interrupt Pending Register Section 11.4.1.115
+#define EDMAREG_IPRH 0x6C  // Interrupt Pending Register High Section 11.4.1.116
+#define EDMAREG_ICR 0x70   // Interrupt Clear Register Section 11.4.1.117
+#define EDMAREG_ICRH 0x74  // Interrupt Clear Register High Section 11.4.1.118
+#define EDMAREG_IEVAL 0x78 // Interrupt Evaluate Register Section 11.4.1.119
+#define EDMAREG_QER 0x80   // QDMA Event Register Section 11.4.1.120
+#define EDMAREG_QEER 0x84  // QDMA Event Enable Register Section 11.4.1.121
+#define EDMAREG_QEECR 0x88 // QDMA Event Enable Clear Register Section 11.4.1.122
+#define EDMAREG_QEESR 0x8C // QDMA Event Enable Set Register Section 11.4.1.123
+#define EDMAREG_QSER 0x90  // QDMA Secondary Event Register Section 11.4.1.124
+#define EDMAREG_QSECR 0x94 // QDMA Secondary Event Clear Register Section 11.4.1.125
+
+#define SHADOW1(reg) ((0x2200 + reg) / WORDSZ)
 
 // (TRM 11.3.3.1)
 #define EDMA_PARAM_OFFSET (0x4000 / WORDSZ)

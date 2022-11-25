@@ -256,18 +256,21 @@ void setup_dma_channel_zero() {
   EDMA_BASE[EDMA_DMAQNUM_0] &= 0xFFFFFFF0;
 
   // Clear interrupt and secondary event registers.
-  EDMA_BASE[EDMA_SECR] |= dmaChannelMask;
-  EDMA_BASE[EDMA_ICR] |= dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_SECR)] |= dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_ICR)] |= dmaChannelMask;
+
+  // Disable the queue watermark (in case that's triggering CCERR?)
+  EDMA_BASE[EDMA_QWMTHRA] = 0x11 | (0x11 << 8) | (0x11 << 16);
 
   // Enable channel interrupt.
-  EDMA_BASE[EDMA_IESR] |= dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_IESR)] |= dmaChannelMask;
 
   // Clear channel controller errors.  (Indiscriminantly. TODO: there
   // are 2 distinct kinds of error here.)
   EDMA_BASE[EDMA_CCERRCLR] |= 0xffffffff;
 
   // Enable channel for an event trigger.
-  EDMA_BASE[EDMA_EESR] |= dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_EESR)] |= dmaChannelMask;
 
   // Clear event missed register.
   EDMA_BASE[EDMA_EMCR] |= dmaChannelMask;
@@ -281,6 +284,10 @@ void setup_dma_channel_zero() {
   edma_param_entry->lnkrld.link = 0xFFFF;
   edma_param_entry->lnkrld.bcntrld = 0x0000;
   edma_param_entry->opt.tcc = dmaChannel;
+
+  // Static param should not be set (current code is not optimized as
+  // such).  If set, you will see a CCERR interrupt.
+  edma_param_entry->opt.static_set = 0;
 
   // Transfer complete interrupt enable.
   edma_param_entry->opt.tcinten = 1;
@@ -330,8 +337,12 @@ uint32_t wait_dma() {
 #else
   uint32_t wait = 0;
 
-  if (EDMA_BASE[EDMA_CCERR] != 0) {
+  if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
     __halt();
+  }
+
+  if (EDMA_BASE[EDMA_CCERR] != 0) {
+    //__halt();
   }
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
@@ -340,6 +351,8 @@ uint32_t wait_dma() {
   }
 
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
+
+  EDMA_BASE[SHADOW1(EDMAREG_ICR)] = dmaChannelMask;
 
   return wait;
 #endif
@@ -589,7 +602,7 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  start_dma(1, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
   wait_dma();
 
   // For two banks

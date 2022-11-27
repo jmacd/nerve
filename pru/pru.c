@@ -17,6 +17,13 @@ struct pru_rpmsg_transport rpmsg_transport;
 char rpmsg_payload[RPMSG_BUF_SIZE];
 uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 
+void sleep();
+void setRow(uint32_t row);
+void testPix();
+void toggleClock();
+void setPix(pixel_t *pixel);
+void latchRows();
+
 // Set in resourceTable.rpmsg_vdev.status when the kernel is ready.
 #define VIRTIO_CONFIG_S_DRIVER_OK ((uint32_t)1 << 2)
 
@@ -228,6 +235,48 @@ void uled2(int val) { set(gpio1, 22, val); }
 void uled3(int val) { set(gpio1, 23, val); }
 void uled4(int val) { set(gpio1, 24, val); }
 
+void park(int cbits) {
+  uint32_t row;
+
+  pixel_t pixel;
+  memset(&pixel, 0, sizeof(pixel));
+
+  if (cbits & 0x2) {
+    pixel.gpv1.bits.j3_g1 = 1;
+    pixel.gpv0.bits.j3_g2 = 1;
+    pixel.gpv2.bits.j1_g1 = 1;
+    pixel.gpv2.bits.j1_g2 = 1;
+  }
+
+  if (cbits & 0x1) {
+    pixel.gpv0.bits.j3_b1 = 1;
+    pixel.gpv0.bits.j3_b2 = 1;
+    pixel.gpv2.bits.j1_b1 = 1;
+    pixel.gpv0.bits.j1_b2 = 1;
+  }
+
+  if (cbits & 0x4) {
+    pixel.gpv0.bits.j3_r1 = 1;
+    pixel.gpv1.bits.j3_r2 = 1;
+    pixel.gpv2.bits.j1_r1 = 1;
+    pixel.gpv0.bits.j1_r2 = 1;
+  }
+
+  for (row = 0; row < FRAMEBUF_SCANS; row++) {
+    uint32_t pix;
+
+    setRow(row);
+
+    pixel.gpv1.bits.rowSelect = row;
+
+    for (pix = 0; pix < FRAMEBUF_WIDTH; pix++) {
+      setPix(&pixel);
+      toggleClock();
+    }
+    latchRows();
+  }
+}
+
 // DMA completion interrupt use tpcc_int_pend_po1
 
 // EDMA system event 0 and 1 correspond with pr1_host[7] and pr1_host[6]
@@ -283,7 +332,6 @@ void setup_dma_channel_zero() {
 
   edma_param_entry->lnkrld.link = 0xFFFF;
   edma_param_entry->lnkrld.bcntrld = 0x0000;
-  edma_param_entry->opt.tcc = dmaChannel;
 
   // Static param should not be set (current code is not optimized as
   // such).  If set, you will see a CCERR interrupt.
@@ -321,6 +369,10 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   edma_param_entry->src = resourceTable.framebufs.pa + (currentBank * FRAMEBUF_BANK_SIZE) +
                           (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
 
+  edma_param_entry->ccnt.ccnt = 1;
+  edma_param_entry->abcnt.acnt = 1 << 12;
+  edma_param_entry->abcnt.bcnt = 1;
+
 #if 0
   // The equivalent blocking memory transfer:
   memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
@@ -338,11 +390,11 @@ uint32_t wait_dma() {
   uint32_t wait = 0;
 
   if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
-    __halt();
+    park(1);
   }
 
   if (EDMA_BASE[EDMA_CCERR] != 0) {
-    //__halt();
+    park(2);
   }
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
@@ -357,13 +409,6 @@ uint32_t wait_dma() {
   return wait;
 #endif
 }
-
-void sleep();
-void setRow(uint32_t row);
-void testPix();
-void toggleClock();
-void setPix(pixel_t *pixel);
-void latchRows();
 
 void clock(int val) { set(gpio1, 19, val); }
 void latch(int val) { set(gpio1, 29, val); }
@@ -587,9 +632,8 @@ void main(void) {
 
   setup_dma_channel_zero();
 
-  wait_for_arm();
-
-  send_to_arm();
+  // wait_for_arm();
+  // send_to_arm();
 
   frame_banks[0] = (pixel_t *)(resourceTable.framebufs.pa);
   frame_banks[1] = (pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);

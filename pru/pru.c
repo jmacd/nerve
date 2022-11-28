@@ -235,7 +235,7 @@ void uled2(int val) { set(gpio1, 22, val); }
 void uled3(int val) { set(gpio1, 23, val); }
 void uled4(int val) { set(gpio1, 24, val); }
 
-void park(int cbits) {
+void flash(int cbits, int howmany) {
   uint32_t row;
 
   pixel_t pixel;
@@ -262,20 +262,27 @@ void park(int cbits) {
     pixel.gpv0.bits.j1_r2 = 1;
   }
 
-  for (row = 0; row < FRAMEBUF_SCANS; row++) {
-    uint32_t pix;
+  int count;
+  for (count = 0; howmany < 0 || count < howmany; count++) {
+    for (row = 0; row < FRAMEBUF_SCANS; row++) {
+      uint32_t pix;
 
-    setRow(row);
+      setRow(row);
 
-    pixel.gpv1.bits.rowSelect = row;
+      pixel.gpv1.bits.rowSelect = row;
 
-    for (pix = 0; pix < FRAMEBUF_WIDTH; pix++) {
-      setPix(&pixel);
-      toggleClock();
+      for (pix = 0; pix < FRAMEBUF_WIDTH; pix++) {
+        setPix(&pixel);
+        toggleClock();
+      }
+      latchRows();
     }
-    latchRows();
   }
 }
+
+void park(int cbits) { flash(cbits, -1); }
+
+void warn(int cbits) { flash(cbits, 5000); }
 
 // DMA completion interrupt use tpcc_int_pend_po1
 
@@ -288,6 +295,8 @@ const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
 volatile edmaParam *edma_param_entry;
+
+void setup_param();
 
 void setup_dma_channel_zero() {
   // Map Channel 0 to PaRAM 0
@@ -324,6 +333,10 @@ void setup_dma_channel_zero() {
   // Clear event missed register.
   EDMA_BASE[EDMA_EMCR] |= dmaChannelMask;
 
+  setup_param();
+}
+
+void setup_param() {
   // Setup and store PaRAM set for transfer.
   uint16_t paramOffset = EDMA_PARAM_OFFSET;
   paramOffset += ((dmaChannel * EDMA_PARAM_SIZE) / WORDSZ);
@@ -332,10 +345,7 @@ void setup_dma_channel_zero() {
 
   edma_param_entry->lnkrld.link = 0xFFFF;
   edma_param_entry->lnkrld.bcntrld = 0x0000;
-
-  // Static param should not be set (current code is not optimized as
-  // such).  If set, you will see a CCERR interrupt.
-  edma_param_entry->opt.static_set = 0;
+  edma_param_entry->opt.static_set = 1;
 
   // Transfer complete interrupt enable.
   edma_param_entry->opt.tcinten = 1;
@@ -365,6 +375,8 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   } else {
     currentPart++;
   }
+  setup_param();
+
   edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (localTargetBank * FRAMEBUF_PART_SIZE);
   edma_param_entry->src = resourceTable.framebufs.pa + (currentBank * FRAMEBUF_BANK_SIZE) +
                           (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
@@ -372,6 +384,7 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   edma_param_entry->ccnt.ccnt = 1;
   edma_param_entry->abcnt.acnt = 1 << 12;
   edma_param_entry->abcnt.bcnt = 1;
+  edma_param_entry->opt.tcc = dmaChannel;
 
 #if 0
   // The equivalent blocking memory transfer:
@@ -389,12 +402,29 @@ uint32_t wait_dma() {
 #else
   uint32_t wait = 0;
 
+  if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
+
+    // Clear event 62
+    if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CTRL_ERROR_TO_PRU - 32))) {
+      warn(2);
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
+    } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
+      park(4);
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
+    } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
+      warn(6);
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
+    } else {
+      warn(7);
+    }
+  }
+
   if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
-    park(1);
+    park(5);
   }
 
   if (EDMA_BASE[EDMA_CCERR] != 0) {
-    park(2);
+    park(1);
   }
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
@@ -440,9 +470,6 @@ void latchRows() {
 
   latch(HI);
   latch(LO);
-
-  // Slow down to see what's happening.
-  __delay_cycles(60000000);
 }
 
 void setPix(pixel_t *pixel) {
@@ -473,7 +500,11 @@ void reset_hardware_state() {
 
   // Clear the system event mapped to the two input interrupts.
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_ARM;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_EDMA;
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
+  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
 
   // Enable the EDMA (Transfer controller, Channel controller) clocks.
   CM_PER_BASE[CM_PER_TPTC0_CLKCTRL] = CM_PER_CLK_ENABLED;
@@ -632,8 +663,8 @@ void main(void) {
 
   setup_dma_channel_zero();
 
-  // wait_for_arm();
-  // send_to_arm();
+  wait_for_arm();
+  send_to_arm();
 
   frame_banks[0] = (pixel_t *)(resourceTable.framebufs.pa);
   frame_banks[1] = (pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);
@@ -646,8 +677,8 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  wait_dma();
+  // start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  // wait_dma();
 
   // For two banks
   uint32_t localno = 0;
@@ -668,7 +699,7 @@ void main(void) {
         localno ^= 1;
 
         // Start a DMA to fill the next local bank.
-        start_dma(localno, bankno, frame, part);
+        // start_dma(localno, bankno, frame, part);
 
         // For 4 scans per part
         uint32_t scan;
@@ -686,9 +717,12 @@ void main(void) {
           }
 
           latchRows();
+
+          // Slow down to see what's happening.
+          //__delay_cycles(60000000);
         }
         // We want to not wait here by inserting sleeps appropriately.
-        ctrl->dma_wait = wait_dma();
+        // ctrl->dma_wait = wait_dma();
       }
 
       ctrl->framecount++;

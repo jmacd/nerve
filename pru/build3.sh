@@ -44,6 +44,7 @@ configPins() {
 }
 
 #sleep 1
+
 configPins
 #sleep 1
 
@@ -51,11 +52,19 @@ echo "Starting ..."
 echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
-sleep 1
+#sleep 1
 echo "Building user ..."
-
 gcc user.c -o user.out
+
 #./user.out&
 #PID=$$
 #echo "Running... $PID"
-sleep 3600
+#sleep 3600
+
+cd launchmidi
+
+GO=/home/debian/go/bin/go
+
+CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -latopology -ldl -lm" CGO_CFLAGS=-I$HOME/bbb/include ${GO} build ./cmd/helloctlxl
+
+./helloctlxl

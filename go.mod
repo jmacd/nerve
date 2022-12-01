@@ -1,14 +1,11 @@
 module github.com/jmacd/nerve
 
-replace github.com/jmacd/go-artnet => ../go-artnet
+// replace github.com/jmacd/go-artnet => ../go-artnet
+// replace github.com/rakyll/portmidi => ../portmidi
+// replace github.com/jmacd/launchmidi => ../launchmidi
+// replace github.com/fogleman/gg => ../../fogleman/gg
 
-replace github.com/rakyll/portmidi => ../portmidi
-
-replace github.com/jmacd/launchmidi => ../launchmidi
-
-replace github.com/fogleman/gg => ../../fogleman/gg
-
-go 1.14
+go 1.18
 
 require (
 	github.com/deadsy/libusb v0.0.0-20180330230923-04d6a756f531

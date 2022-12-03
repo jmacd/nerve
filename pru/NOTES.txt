@@ -39,3 +39,18 @@ CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -latopology -ldl" CGO_CFLAGS=-I$HOME/bbb/i
 Get this:
 
 https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads/8-3-2019-03
+
+Now for rtmidi:
+
+LD=arm-linux-gnueabihf-ld CC=arm-linux-gnueabihf-gcc CXX=arm-linux-gnueabihf-g++ CFLAGS="-I$HOME/bbb/include" LDFLAGS="-L$HOME/bbb/lib -ldl -lpthread -lm" ./configure --with-alsa --host=arm-linux --prefix=$HOME/bbb --enable-static --disable-shared
+
+export CXX=arm-linux-gnueabihf-g++
+export LD=arm-linux-gnueabihf-ld
+export CC=arm-linux-gnueabihf-gcc
+export LDFLAGS="-L$HOME/bbb/lib -ldl -lpthread -lm -lstdc++"
+export CXXFLAGS="-I$HOME/bbb/include"
+
+
+OK that didn't work well, try this
+
+cmake -DCMAKE_TOOLCHAIN_FILE=$HOME/bbb.cmake -DCMAKE_SYSTEM_PREFIX_PATH=$HOME/bbb -DCMAKE_INSTALL_PREFIX=$HOME/bbb -DBUILD_SHARED_LIBS=OFF ..

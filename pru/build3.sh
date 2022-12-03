@@ -65,6 +65,6 @@ cd launchmidi
 
 GO=/home/debian/go/bin/go
 
-CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -latopology -ldl -lm" CGO_CFLAGS=-I$HOME/bbb/include ${GO} build ./cmd/helloctlxl
+CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -ldl -lm" CGO_CFLAGS=-I$HOME/bbb/include ${GO} build ./cmd/helloctlxl
 
 ./helloctlxl

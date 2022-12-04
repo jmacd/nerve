@@ -56,15 +56,17 @@ echo start > /sys/class/remoteproc/remoteproc1/state
 echo "Building user ..."
 gcc user.c -o user.out
 
-#./user.out&
+#./user.out
 #PID=$$
 #echo "Running... $PID"
 #sleep 3600
 
-cd launchmidi
+#cd launchmidi
 
-GO=/home/debian/go/bin/go
+#GO=/home/debian/go/bin/go
 
-CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -ldl -lm" CGO_CFLAGS=-I$HOME/bbb/include ${GO} build ./cmd/helloctlxl
+#rm ./helloctlxl
 
-./helloctlxl
+#CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm" CGO_CFLAGS=-I/home/debian/bbb/include ${GO} build -ldflags="-extldflags=-static" ./cmd/helloctlxl 
+
+#./helloctlxl

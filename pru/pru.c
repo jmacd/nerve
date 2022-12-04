@@ -556,6 +556,7 @@ void init_test_buffer() {
     }
   }
 
+#if 0
   memset((void *)resourceTable.framebufs.pa, 0, FRAMEBUF_TOTAL_SIZE);
   uint32_t bankno;
   for (bankno = 0; bankno < 2; bankno++) {
@@ -593,6 +594,7 @@ void init_test_buffer() {
       }
     }
   }
+#endif
 }
 
 void wait_for_virtio_ready() {
@@ -677,8 +679,8 @@ void main(void) {
   uint32_t bankno;
 
   // Fill the first bank.
-  // start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  // wait_dma();
+  start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
+  wait_dma();
 
   // For two banks
   uint32_t localno = 0;
@@ -699,7 +701,7 @@ void main(void) {
         localno ^= 1;
 
         // Start a DMA to fill the next local bank.
-        // start_dma(localno, bankno, frame, part);
+        start_dma(localno, bankno, frame, part);
 
         // For 4 scans per part
         uint32_t scan;
@@ -722,7 +724,7 @@ void main(void) {
           //__delay_cycles(60000000);
         }
         // We want to not wait here by inserting sleeps appropriately.
-        // ctrl->dma_wait = wait_dma();
+        ctrl->dma_wait = wait_dma();
       }
 
       ctrl->framecount++;

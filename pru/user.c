@@ -182,6 +182,44 @@ int main(void) {
   printf("Framebufs mapped at addr=%x\n", framebufsPtr);
   uint32_t *framebufs = (uint32_t *)framebufsPtr;
 
+  while (1) {
+    memset((void *)framebufs, 0, FRAMEBUF_TOTAL_SIZE);
+    uint32_t frame;
+    pixel_t *pixptr = (pixel_t *)framebufs;
+
+    for (frame = 0; frame < 2 * FRAMEBUF_FRAMES_PER_BANK; frame++) {
+
+      uint32_t row;
+
+      for (row = 0; row < FRAMEBUF_SCANS; row++) {
+        uint32_t pix;
+
+        // For 64 pixels width
+        for (pix = 0; pix < 64; pix++) {
+          int r = rand();
+
+          pixptr->gpv1.bits.rowSelect = row;
+          pixptr->gpv1.bits.inputClock = 0;
+          pixptr->gpv1.bits.outputEnable = 0;
+          pixptr->gpv1.bits.inputLatch = 0;
+          pixptr->gpv0.bits.j3_r1 = (r & 0x1) != 0;
+          pixptr->gpv1.bits.j3_g1 = (r & 0x2) != 0;
+          pixptr->gpv0.bits.j3_b1 = (r & 0x4) != 0;
+          pixptr->gpv1.bits.j3_r2 = (r & 0x8) != 0;
+          pixptr->gpv0.bits.j3_g2 = (r & 0x10) != 0;
+          pixptr->gpv0.bits.j3_b2 = (r & 0x20) != 0;
+          pixptr->gpv2.bits.j1_r1 = (r & 0x40) != 0;
+          pixptr->gpv2.bits.j1_g1 = (r & 0x80) != 0;
+          pixptr->gpv2.bits.j1_b1 = (r & 0x100) != 0;
+          pixptr->gpv0.bits.j1_r2 = (r & 0x200) != 0;
+          pixptr->gpv2.bits.j1_g2 = (r & 0x400) != 0;
+          pixptr->gpv0.bits.j1_b2 = (r & 0x800) != 0;
+          pixptr++;
+        }
+      }
+    }
+  }
+
   // *framebufs = rand();
   // for (int i = 0; i < (FRAMEBUF_TOTAL_SIZE / WORDSZ); i++) {
   //   framebufs[i] = rand();

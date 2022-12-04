@@ -54,3 +54,14 @@ export CXXFLAGS="-I$HOME/bbb/include"
 OK that didn't work well, try this
 
 cmake -DCMAKE_TOOLCHAIN_FILE=$HOME/bbb.cmake -DCMAKE_SYSTEM_PREFIX_PATH=$HOME/bbb -DCMAKE_INSTALL_PREFIX=$HOME/bbb -DBUILD_SHARED_LIBS=OFF ..
+
+
+Had to add to the vendor dir the missing .h files, then edit the CGO preamble
+
+/*
+#cgo CXXFLAGS: -g -std=c++11 -I/home/debian/bbb/include
+#cgo LDFLAGS: -g
+
+#cgo linux CXXFLAGS: -D__LINUX_ALSA__
+#cgo linux LDFLAGS: -lasound -pthread -ldl
+*/

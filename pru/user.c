@@ -113,6 +113,11 @@ void demoPrint(void) {
   printf("finish addr 0x%x\n", pixaddr);
 }
 
+int rbit(double p) {
+  // return 0;
+  return ((double)rand() / (double)RAND_MAX) <= p;
+}
+
 int main(void) {
 #if 0
   demoPrint();
@@ -182,8 +187,9 @@ int main(void) {
   printf("Framebufs mapped at addr=%x\n", framebufsPtr);
   uint32_t *framebufs = (uint32_t *)framebufsPtr;
 
-  while (1) {
-    memset((void *)framebufs, 0, FRAMEBUF_TOTAL_SIZE);
+  memset((void *)framebufs, 0, FRAMEBUF_TOTAL_SIZE);
+
+  do {
     uint32_t frame;
     pixel_t *pixptr = (pixel_t *)framebufs;
 
@@ -198,38 +204,31 @@ int main(void) {
         for (pix = 0; pix < 64; pix++) {
           int r = rand();
 
+          const double R = 0.580;
+          const double G = 0.0;
+          const double B = 0.827;
+
           pixptr->gpv1.bits.rowSelect = row;
           pixptr->gpv1.bits.inputClock = 0;
           pixptr->gpv1.bits.outputEnable = 0;
           pixptr->gpv1.bits.inputLatch = 0;
-          pixptr->gpv0.bits.j3_r1 = (r & 0x1) != 0;
-          pixptr->gpv1.bits.j3_g1 = (r & 0x2) != 0;
-          pixptr->gpv0.bits.j3_b1 = (r & 0x4) != 0;
-          pixptr->gpv1.bits.j3_r2 = (r & 0x8) != 0;
-          pixptr->gpv0.bits.j3_g2 = (r & 0x10) != 0;
-          pixptr->gpv0.bits.j3_b2 = (r & 0x20) != 0;
-          pixptr->gpv2.bits.j1_r1 = (r & 0x40) != 0;
-          pixptr->gpv2.bits.j1_g1 = (r & 0x80) != 0;
-          pixptr->gpv2.bits.j1_b1 = (r & 0x100) != 0;
-          pixptr->gpv0.bits.j1_r2 = (r & 0x200) != 0;
-          pixptr->gpv2.bits.j1_g2 = (r & 0x400) != 0;
-          pixptr->gpv0.bits.j1_b2 = (r & 0x800) != 0;
+          pixptr->gpv0.bits.j3_r1 = rbit(R);
+          pixptr->gpv1.bits.j3_g1 = rbit(G);
+          pixptr->gpv0.bits.j3_b1 = rbit(B);
+          pixptr->gpv1.bits.j3_r2 = rbit(R);
+          pixptr->gpv0.bits.j3_g2 = rbit(G);
+          pixptr->gpv0.bits.j3_b2 = rbit(B);
+          pixptr->gpv2.bits.j1_r1 = rbit(R);
+          pixptr->gpv2.bits.j1_g1 = rbit(G);
+          pixptr->gpv2.bits.j1_b1 = rbit(B);
+          pixptr->gpv0.bits.j1_r2 = rbit(R);
+          pixptr->gpv2.bits.j1_g2 = rbit(G);
+          pixptr->gpv0.bits.j1_b2 = rbit(B);
           pixptr++;
         }
       }
     }
-  }
-
-  // *framebufs = rand();
-  // for (int i = 0; i < (FRAMEBUF_TOTAL_SIZE / WORDSZ); i++) {
-  //   framebufs[i] = rand();
-  // }
-
-  // uint32_t *start = framebufs;
-  // uint32_t *limit = framebufs + (FRAMEBUF_TOTAL_SIZE / WORDSZ);
-  // while (start < limit) {
-  //   *start++ = rand();
-  // }
+  } while (0);
 
   uint32_t last_value;
   while (1) {

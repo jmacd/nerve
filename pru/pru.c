@@ -723,8 +723,7 @@ void main(void) {
           // Slow down to see what's happening.
           //__delay_cycles(60000000);
         }
-        // We want to not wait here by inserting sleeps appropriately.
-        ctrl->dma_wait = wait_dma();
+        wait_dma();
       }
 
       ctrl->framecount++;

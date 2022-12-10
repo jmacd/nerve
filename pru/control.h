@@ -3,24 +3,6 @@
 
 #define PRU_L4_FAST_SHARED_PRUSS_MEM 0x4a310000
 
-// Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
-
-// J1
-// gp2 |= (1U << 2);  // J1 r1 (P8-07)
-// gp2 |= (1U << 3);  // J1 g1 (P8-08)
-// gp2 |= (1U << 5);  // J1 b1 (P8-09)
-// gp0 |= (1U << 23); // J1 r2 (P8-13)
-// gp2 |= (1U << 4);  // J1 g2 (P8-10)
-// gp0 |= (1U << 26); // J1 b2 (P8-14)
-
-// J3
-// gp0 |= 1U << 30; // r1 (P9-11)
-// gp1 |= 1U << 18; // g1 (P9-14)
-// gp0 |= 1U << 31; // b1 (P9-13)
-// gp1 |= 1U << 16; // r2 (P9-15)
-// gp0 |= 1U << 3;  // g2 (P9-21)
-// gp0 |= 1U << 5;  // b2 (P9-17)
-
 #define WORDSZ sizeof(uint32_t)
 
 #define FRAMEBUF_GPIOS 4
@@ -64,6 +46,9 @@ struct control {
 
 typedef union {
   volatile uint32_t word;
+
+  // Using fpp/capes/bbb/panels/Octoscroller.json as a reference.
+  // Using J1 and J3 for testing.
 
   volatile struct {
     unsigned __bit0 : 1;  // 0

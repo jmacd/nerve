@@ -52,77 +52,12 @@ char readBuf[MAX_BUFFER_SIZE];
 
 #define PRINTCFG(x) printf(#x ": %u\n", x)
 
-void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
-  if (currentBank == 1 && currentFrame == FRAMEBUF_FRAMES_PER_BANK - 1 && currentPart == FRAMEBUF_PARTS_PER_FRAME - 1) {
-    currentBank = 0;
-    currentFrame = 0;
-    currentPart = 0;
-  } else {
-    currentPart++;
-  }
-  uint32_t dst;
-  uint32_t src;
-  dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (localTargetBank * FRAMEBUF_PART_SIZE);
-  src = (currentBank * FRAMEBUF_BANK_SIZE) + (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
-
-  printf("copy dst 0x%x src 0x%x size 0x%x\n", dst, src, FRAMEBUF_PART_SIZE);
-}
-
-void demoPrint(void) {
-  // For two banks
-  uint32_t localno = 0;
-  uint32_t bankno;
-
-  start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-
-  uint32_t pixaddr = 0;
-
-  for (bankno = 0; bankno < 2; bankno++) {
-    // For 256 frames per bank
-    uint32_t frame;
-
-    for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
-
-      uint32_t part;
-      uint32_t row = 0;
-
-      // For 4 parts per frame
-      for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
-
-        localno ^= 1;
-
-        // Start a DMA to fill the next local bank.
-        printf("start dma local=%u bank=%u frame=%u part=%u\n", localno, bankno, frame, part);
-        start_dma(localno, bankno, frame, part);
-
-        // For 4 scans per part
-        uint32_t scan;
-        for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
-
-          printf("start row %u addr 0x%x\n", row, pixaddr);
-
-          uint32_t pix;
-          for (pix = 0; pix < 64; pix++) {
-            pixaddr += 16;
-          }
-        }
-      }
-    }
-  }
-
-  printf("finish addr 0x%x\n", pixaddr);
-}
-
 int rbit(double p) {
   // return 0;
   return ((double)rand() / (double)RAND_MAX) <= p;
 }
 
 int main(void) {
-#if 0
-  demoPrint();
-#endif
-#if 1
   struct pollfd pollfds[1];
   int i;
   int result = 0;
@@ -250,5 +185,4 @@ int main(void) {
   close(pollfds[0].fd);
 
   return 0;
-#endif
 }

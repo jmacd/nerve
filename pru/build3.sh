@@ -54,7 +54,8 @@ echo start > /sys/class/remoteproc/remoteproc1/state
 
 #sleep 1
 echo "Building user ..."
-gcc user.c -o user.out
+#gcc user.c -o user.out
+/home/debian/go/bin/go build control.go
 
 #./user.out
 #PID=$$

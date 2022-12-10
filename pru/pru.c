@@ -235,27 +235,37 @@ void uled2(int val) { set(gpio1, 22, val); }
 void uled3(int val) { set(gpio1, 23, val); }
 void uled4(int val) { set(gpio1, 24, val); }
 
+// Color bits used for flash(), warn(), park().
+#define CBITS_BLACK 0x0
+#define CBITS_RED 0x1
+#define CBITS_GREEN 0x2
+#define CBITS_BLUE 0x4
+#define CBITS_YELLOW (CBITS_RED | CBITS_GREEN)
+#define CBITS_CYAN (CBITS_GREEN | CBITS_BLUE)
+#define CBITS_MAG (CBITS_RED | CBITS_BLUE)
+#define CBITS_WHITE (CBITS_RED | CBITS_GREEN | CBITS_BLUE)
+
 void flash(int cbits, int howmany) {
   uint32_t row;
 
   pixel_t pixel;
   memset(&pixel, 0, sizeof(pixel));
 
-  if (cbits & 0x2) {
+  if (cbits & CBITS_GREEN) {
     pixel.gpv1.bits.j3_g1 = 1;
     pixel.gpv0.bits.j3_g2 = 1;
     pixel.gpv2.bits.j1_g1 = 1;
     pixel.gpv2.bits.j1_g2 = 1;
   }
 
-  if (cbits & 0x1) {
+  if (cbits & CBITS_BLUE) {
     pixel.gpv0.bits.j3_b1 = 1;
     pixel.gpv0.bits.j3_b2 = 1;
     pixel.gpv2.bits.j1_b1 = 1;
     pixel.gpv0.bits.j1_b2 = 1;
   }
 
-  if (cbits & 0x4) {
+  if (cbits & CBITS_RED) {
     pixel.gpv0.bits.j3_r1 = 1;
     pixel.gpv1.bits.j3_r2 = 1;
     pixel.gpv2.bits.j1_r1 = 1;
@@ -280,9 +290,9 @@ void flash(int cbits, int howmany) {
   }
 }
 
-void park(int cbits) { flash(cbits, -1); }
-
 void warn(int cbits) { flash(cbits, 5000); }
+
+void park(int cbits) { flash(cbits, -1); }
 
 // DMA completion interrupt use tpcc_int_pend_po1
 
@@ -396,35 +406,41 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
 #endif
 }
 
-uint32_t wait_dma() {
+uint32_t wait_dma(uint32_t *restart) {
 #if 0
   return 0;
 #else
   uint32_t wait = 0;
 
+  // TODO understand how "omap_intc_handle_irq: spurious irq!" comes about (kernel 4.19?)
+  // Note kernel is unhappy with "virtio_rpmsg_bus virtio0: msg received with no recipient"
+
   if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
     // Clear event 62
     if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CTRL_ERROR_TO_PRU - 32))) {
-      warn(2);
+      warn(CBITS_RED);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
-      park(4);
+      park(CBITS_BLUE);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
     } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
-      warn(6);
+      // This means the control program restarted.
+      *restart = 1;
+      // warn(CBITS_GREEN);
+
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
     } else {
-      warn(7);
+      warn(CBITS_WHITE);
     }
   }
 
   if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
-    park(5);
+    park(CBITS_YELLOW);
   }
 
   if (EDMA_BASE[EDMA_CCERR] != 0) {
-    park(1);
+    park(CBITS_CYAN);
   }
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
@@ -527,14 +543,16 @@ void reset_hardware_state() {
   outputEnable(LO);
 }
 
+// init_test_buffer sets the PRU-local pixels to blue and the
+// framebuffer to a red-green-red-green stripe pattern.
 void init_test_buffer() {
   // Turn off CLK, OE, LATCH pins and set the correct row number
   // for each pixel.
   uint32_t pix, row;
-  pixel_t *pixptr = (pixel_t *)0x10000;
+  pixel_t *pixptr = (pixel_t *)0x10000; // Base 8kB of PRU shared storage.
 
-  // 12 rows filled in 12KB shared PRU ram
-  for (row = 0; row < (3 * FRAMEBUF_SCANS_PER_PART); row++) {
+  // The PRU-local storage is initialized with all blue pixels.
+  for (row = 0; row < (2 * FRAMEBUF_SCANS_PER_PART); row++) {
     for (pix = 0; pix < 64; pix++) {
       pixptr->gpv1.bits.rowSelect = row;
       pixptr->gpv1.bits.inputClock = 0;
@@ -556,7 +574,7 @@ void init_test_buffer() {
     }
   }
 
-#if 0
+  // Zero the framebuffer before setting the test pattern.
   memset((void *)resourceTable.framebufs.pa, 0, FRAMEBUF_TOTAL_SIZE);
   uint32_t bankno;
   for (bankno = 0; bankno < 2; bankno++) {
@@ -594,7 +612,6 @@ void init_test_buffer() {
       }
     }
   }
-#endif
 }
 
 void wait_for_virtio_ready() {
@@ -622,25 +639,6 @@ void setup_transport() {
   }
 }
 
-void wait_for_arm() {
-  while (1) {
-    // Check register R31 for the ARM interrupt.
-    if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
-
-      // TODO: There are more than one system event: EDMA errors lead
-      // here as well as messages from the ARM.
-
-      // Clear the event status
-      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
-
-      // Receive all available messages from ARM.
-      if (pru_rpmsg_receive(&rpmsg_transport, &rpmsg_src, &rpmsg_dst, rpmsg_payload, &rpmsg_len) == PRU_RPMSG_SUCCESS) {
-        break;
-      }
-    }
-  }
-}
-
 // Send the carveout addresses to the ARM.
 void send_to_arm() {
   memcpy(rpmsg_payload, &resourceTable.controls.pa, 4);
@@ -665,8 +663,7 @@ void main(void) {
 
   setup_dma_channel_zero();
 
-  wait_for_arm();
-  send_to_arm();
+  init_test_buffer();
 
   frame_banks[0] = (pixel_t *)(resourceTable.framebufs.pa);
   frame_banks[1] = (pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);
@@ -674,22 +671,20 @@ void main(void) {
   local_banks[0] = (pixel_t *)0x10000;
   local_banks[1] = (pixel_t *)0x11000;
 
-  init_test_buffer();
-
   uint32_t bankno;
 
   // Fill the first bank.
   start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  wait_dma();
+  wait_dma(&bankno); // bankno is a dummy var
 
   // For two banks
   uint32_t localno = 0;
   for (bankno = 0; 1; bankno ^= 1) {
     // For 256 frames per bank
     uint32_t frame;
+    uint32_t restart_signaled = 0;
 
     for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
-
       uint32_t row = 0;
       uint32_t part;
 
@@ -723,10 +718,14 @@ void main(void) {
           // Slow down to see what's happening.
           //__delay_cycles(60000000);
         }
-        wait_dma();
+        wait_dma(&restart_signaled);
       }
 
       ctrl->framecount++;
+    }
+    if (restart_signaled != 0) {
+      send_to_arm();
+      restart_signaled = 0;
     }
   }
 }

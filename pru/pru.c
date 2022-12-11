@@ -609,18 +609,46 @@ void init_test_buffer() {
           pixptr->gpv1.bits.inputClock = 0;
           pixptr->gpv1.bits.outputEnable = 0;
           pixptr->gpv1.bits.inputLatch = 0;
-          pixptr->gpv0.bits.j3_r1 = 1;
-          pixptr->gpv1.bits.j3_g1 = 0;
-          pixptr->gpv0.bits.j3_b1 = 0;
-          pixptr->gpv1.bits.j3_r2 = 0;
-          pixptr->gpv0.bits.j3_g2 = 1;
-          pixptr->gpv0.bits.j3_b2 = 0;
-          pixptr->gpv2.bits.j1_r1 = 1;
-          pixptr->gpv2.bits.j1_g1 = 0;
-          pixptr->gpv2.bits.j1_b1 = 0;
-          pixptr->gpv0.bits.j1_r2 = 0;
-          pixptr->gpv2.bits.j1_g2 = 1;
-          pixptr->gpv0.bits.j1_b2 = 0;
+
+          if (pix < 32) {
+            pixptr->gpv0.bits.j3_r1 = 1;
+            pixptr->gpv1.bits.j3_g1 = 0;
+            pixptr->gpv0.bits.j3_b1 = 0;
+            pixptr->gpv1.bits.j3_r2 = 0;
+            pixptr->gpv0.bits.j3_g2 = 1;
+            pixptr->gpv0.bits.j3_b2 = 0;
+
+            if (pix < 16) {
+              pixptr->gpv2.bits.j1_r1 = 1;
+              pixptr->gpv2.bits.j1_g1 = 0;
+              pixptr->gpv2.bits.j1_b1 = 0;
+              pixptr->gpv0.bits.j1_r2 = 0;
+              pixptr->gpv2.bits.j1_g2 = 1;
+              pixptr->gpv0.bits.j1_b2 = 0;
+            } else {
+              pixptr->gpv2.bits.j1_r1 = 0;
+              pixptr->gpv2.bits.j1_g1 = 0;
+              pixptr->gpv2.bits.j1_b1 = 1;
+              pixptr->gpv0.bits.j1_r2 = 0;
+              pixptr->gpv2.bits.j1_g2 = 0;
+              pixptr->gpv0.bits.j1_b2 = 1;
+            }
+
+          } else {
+            pixptr->gpv0.bits.j3_r1 = 0;
+            pixptr->gpv1.bits.j3_g1 = 1;
+            pixptr->gpv0.bits.j3_b1 = 0;
+            pixptr->gpv1.bits.j3_r2 = 1;
+            pixptr->gpv0.bits.j3_g2 = 0;
+            pixptr->gpv0.bits.j3_b2 = 0;
+            pixptr->gpv2.bits.j1_r1 = 0;
+            pixptr->gpv2.bits.j1_g1 = 1;
+            pixptr->gpv2.bits.j1_b1 = 0;
+            pixptr->gpv0.bits.j1_r2 = 1;
+            pixptr->gpv2.bits.j1_g2 = 0;
+            pixptr->gpv0.bits.j1_b2 = 0;
+          }
+
           pixptr++;
         }
       }
@@ -655,8 +683,8 @@ void setup_transport() {
 
 // Send the carveout addresses to the ARM.
 void send_to_arm() {
-  if (pru_rpmsg_receive(&rpmsg_transport, &rpmsg_src, &rpmsg_dst, rpmsg_payload, &rpmsg_len) == PRU_RPMSG_SUCCESS) {
-    break;
+  if (pru_rpmsg_receive(&rpmsg_transport, &rpmsg_src, &rpmsg_dst, rpmsg_payload, &rpmsg_len) != PRU_RPMSG_SUCCESS) {
+    return;
   }
   memcpy(rpmsg_payload, &resourceTable.controls.pa, 4);
   while (pru_rpmsg_send(&rpmsg_transport, rpmsg_dst, rpmsg_src, rpmsg_payload, 4) != PRU_RPMSG_SUCCESS) {

@@ -284,6 +284,7 @@ typedef struct {
 // (TRM 11.3.3.1)
 #define EDMA_PARAM_OFFSET (0x4000 / WORDSZ)
 #define EDMA_PARAM_SIZE sizeof(edmaParam) // 32 bytes
+#define EDMA_PARAM_NUM 256
 
 // bit 5 is the valid strobe to generate system events with __R31
 #define R31_INTERRUPT_ENABLE (1 << 5)

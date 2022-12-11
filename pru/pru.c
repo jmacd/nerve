@@ -309,6 +309,9 @@ volatile edmaParam *edma_param_entry;
 void setup_param();
 
 void setup_dma_channel_zero() {
+  // Zero the PaRAM entries.
+  memset((void *)(EDMA_BASE + EDMA_PARAM_OFFSET / WORDSZ), 0, EDMA_PARAM_SIZE * EDMA_PARAM_NUM);
+
   // Map Channel 0 to PaRAM 0
   // DCHMAP_0 == DMA Channel 0 mapping to PaRAM set number 0.
   EDMA_BASE[EDMA_DCHMAP_0] = dmaChannel;
@@ -415,6 +418,17 @@ uint32_t wait_dma(uint32_t *restart) {
   // TODO understand how "omap_intc_handle_irq: spurious irq!" comes about (kernel 4.19?)
   // Note kernel is unhappy with "virtio_rpmsg_bus virtio0: msg received with no recipient"
 
+  if (EDMA_BASE[EDMA_CCERR] != 0) {
+    park(CBITS_CYAN);
+  }
+
+  if (EDMA_BASE[EDMA_EMR]) {
+    warn(CBITS_YELLOW);
+  }
+  if (EDMA_BASE[EDMA_EMRH]) {
+    warn(CBITS_CYAN);
+  }
+
   if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
     // Clear event 62
@@ -425,9 +439,9 @@ uint32_t wait_dma(uint32_t *restart) {
       park(CBITS_BLUE);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
     } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
-      // This means the control program restarted.
+      // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
-      // warn(CBITS_GREEN);
+      warn(CBITS_GREEN);
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
     } else {
@@ -435,13 +449,13 @@ uint32_t wait_dma(uint32_t *restart) {
     }
   }
 
-  if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
-    park(CBITS_YELLOW);
-  }
+  // if (EDMA_BASE[EDMA_EMR] & dmaChannelMask) {
+  //   park(CBITS_YELLOW);
+  // }
 
-  if (EDMA_BASE[EDMA_CCERR] != 0) {
-    park(CBITS_CYAN);
-  }
+  // if (EDMA_BASE[EDMA_CCERR] != 0) {
+  //   park(CBITS_CYAN);
+  // }
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
     //__halt();
@@ -641,6 +655,9 @@ void setup_transport() {
 
 // Send the carveout addresses to the ARM.
 void send_to_arm() {
+  if (pru_rpmsg_receive(&rpmsg_transport, &rpmsg_src, &rpmsg_dst, rpmsg_payload, &rpmsg_len) == PRU_RPMSG_SUCCESS) {
+    break;
+  }
   memcpy(rpmsg_payload, &resourceTable.controls.pa, 4);
   while (pru_rpmsg_send(&rpmsg_transport, rpmsg_dst, rpmsg_src, rpmsg_payload, 4) != PRU_RPMSG_SUCCESS) {
   }
@@ -725,7 +742,6 @@ void main(void) {
     }
     if (restart_signaled != 0) {
       send_to_arm();
-      restart_signaled = 0;
     }
   }
 }

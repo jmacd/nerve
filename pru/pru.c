@@ -503,22 +503,10 @@ void latchRows() {
 }
 
 void setPix(pixel_t *pixel) {
-  // Faster w/ a single write, but can be noisy.
   gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
   gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
   gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
   gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
-
-  // Less noise from the box when I use two writes.
-  // gpio0[GPIO_SETDATAOUT] = pixel->gpv0.word;
-  // gpio1[GPIO_SETDATAOUT] = pixel->gpv1.word;
-  // gpio2[GPIO_SETDATAOUT] = pixel->gpv2.word;
-  // gpio3[GPIO_SETDATAOUT] = pixel->gpv3.word;
-
-  // gpio0[GPIO_CLEARDATAOUT] = ~pixel->gpv0.word;
-  // gpio1[GPIO_CLEARDATAOUT] = ~pixel->gpv1.word;
-  // gpio2[GPIO_CLEARDATAOUT] = ~pixel->gpv2.word;
-  // gpio3[GPIO_CLEARDATAOUT] = ~pixel->gpv3.word;
 }
 
 void reset_hardware_state() {
@@ -565,7 +553,9 @@ void init_test_buffer() {
   uint32_t pix, row;
   pixel_t *pixptr = (pixel_t *)0x10000; // Base 8kB of PRU shared storage.
 
-  // The PRU-local storage is initialized with all blue pixels.
+  // The PRU-local storage is initialized with all blue pixels.  If
+  // for some reason the DMA is not succesful, these pixels represent
+  // rows 0-15 blue, rows 16-31 dark.
   for (row = 0; row < (2 * FRAMEBUF_SCANS_PER_PART); row++) {
     for (pix = 0; pix < 64; pix++) {
       pixptr->gpv1.bits.rowSelect = row;
@@ -603,51 +593,31 @@ void init_test_buffer() {
       for (row = 0; row < FRAMEBUF_SCANS; row++) {
         uint32_t pix;
 
-        // For 64 pixels width
+        // This draws a blue checkerboard pattern with alternating red
+        // and green squares.
         for (pix = 0; pix < 64; pix++) {
           pixptr->gpv1.bits.rowSelect = row;
           pixptr->gpv1.bits.inputClock = 0;
           pixptr->gpv1.bits.outputEnable = 0;
           pixptr->gpv1.bits.inputLatch = 0;
 
-          if (pix < 32) {
-            pixptr->gpv0.bits.j3_r1 = 1;
-            pixptr->gpv1.bits.j3_g1 = 0;
-            pixptr->gpv0.bits.j3_b1 = 0;
-            pixptr->gpv1.bits.j3_r2 = 0;
-            pixptr->gpv0.bits.j3_g2 = 1;
-            pixptr->gpv0.bits.j3_b2 = 0;
+          uint32_t quad = (pix >> 4) & 1;
 
-            if (pix < 16) {
-              pixptr->gpv2.bits.j1_r1 = 1;
-              pixptr->gpv2.bits.j1_g1 = 0;
-              pixptr->gpv2.bits.j1_b1 = 0;
-              pixptr->gpv0.bits.j1_r2 = 0;
-              pixptr->gpv2.bits.j1_g2 = 1;
-              pixptr->gpv0.bits.j1_b2 = 0;
-            } else {
-              pixptr->gpv2.bits.j1_r1 = 0;
-              pixptr->gpv2.bits.j1_g1 = 0;
-              pixptr->gpv2.bits.j1_b1 = 1;
-              pixptr->gpv0.bits.j1_r2 = 0;
-              pixptr->gpv2.bits.j1_g2 = 0;
-              pixptr->gpv0.bits.j1_b2 = 1;
-            }
+          // J3
+          pixptr->gpv0.bits.j3_r1 = 1 ^ quad;
+          pixptr->gpv1.bits.j3_g1 = 0;
+          pixptr->gpv0.bits.j3_b1 = 0 ^ quad;
+          pixptr->gpv1.bits.j3_r2 = 0;
+          pixptr->gpv0.bits.j3_g2 = 0 ^ quad;
+          pixptr->gpv0.bits.j3_b2 = 1 ^ quad;
 
-          } else {
-            pixptr->gpv0.bits.j3_r1 = 0;
-            pixptr->gpv1.bits.j3_g1 = 1;
-            pixptr->gpv0.bits.j3_b1 = 0;
-            pixptr->gpv1.bits.j3_r2 = 1;
-            pixptr->gpv0.bits.j3_g2 = 0;
-            pixptr->gpv0.bits.j3_b2 = 0;
-            pixptr->gpv2.bits.j1_r1 = 0;
-            pixptr->gpv2.bits.j1_g1 = 1;
-            pixptr->gpv2.bits.j1_b1 = 0;
-            pixptr->gpv0.bits.j1_r2 = 1;
-            pixptr->gpv2.bits.j1_g2 = 0;
-            pixptr->gpv0.bits.j1_b2 = 0;
-          }
+          // J1
+          pixptr->gpv2.bits.j1_r1 = 1 ^ quad;
+          pixptr->gpv2.bits.j1_g1 = 0;
+          pixptr->gpv2.bits.j1_b1 = 0 ^ quad;
+          pixptr->gpv0.bits.j1_r2 = 0;
+          pixptr->gpv2.bits.j1_g2 = 0 ^ quad;
+          pixptr->gpv0.bits.j1_b2 = 1 ^ quad;
 
           pixptr++;
         }
@@ -693,7 +663,8 @@ void send_to_arm() {
 
 control_t *setup_controls() {
   control_t *ctrl = (control_t *)resourceTable.controls.pa;
-  ctrl->framebufs = (uint32_t *)resourceTable.framebufs.pa;
+  ctrl->framebufs_addr = resourceTable.framebufs.pa;
+  ctrl->framebufs_size = FRAMEBUF_TOTAL_SIZE;
   return ctrl;
 }
 
@@ -761,7 +732,7 @@ void main(void) {
           latchRows();
 
           // Slow down to see what's happening.
-          //__delay_cycles(60000000);
+          // __delay_cycles(10000000);
         }
         wait_dma(&restart_signaled);
       }

@@ -52,22 +52,13 @@ echo "Starting ..."
 echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
-#sleep 1
-echo "Building user ..."
-#gcc user.c -o user.out
-/home/debian/go/bin/go build control.go
+echo "Building control.go"
 
-#./user.out
-#PID=$$
-#echo "Running... $PID"
-#sleep 3600
+rm ./control
 
-#cd launchmidi
+export GO=/home/debian/go/bin/go
+export CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm"
+export CGO_CFLAGS=-I/home/debian/bbb/include
+export CGO_CXXFLAGS=-I/home/debian/bbb/include
+${GO} build -ldflags="-extldflags=-static" control.go
 
-#GO=/home/debian/go/bin/go
-
-#rm ./helloctlxl
-
-#CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm" CGO_CFLAGS=-I/home/debian/bbb/include ${GO} build -ldflags="-extldflags=-static" ./cmd/helloctlxl 
-
-#./helloctlxl

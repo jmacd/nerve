@@ -39,7 +39,8 @@
 typedef struct control control_t;
 
 struct control {
-  volatile uint32_t *framebufs;
+  volatile uint32_t framebufs_addr;
+  volatile uint32_t framebufs_size;
   volatile uint32_t framecount;
   volatile uint32_t dma_wait;
 };

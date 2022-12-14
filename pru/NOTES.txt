@@ -1,0 +1,67 @@
+USe https://cmake.org/cmake/help/book/mastering-cmake/chapter/Cross%20Compiling%20With%20CMake.html
+
+git clone git@github.com:alsa-project/alsa-lib.git
+
+  824  CC=arm-linux-gnueabihf-gcc ./configure --host=arm-linux
+  825  more INSTALL 
+  826  ./gitcompile
+  827  sudo apt-get install libtool
+  828  ./gitcompile
+  829  make clean
+  830  CC=arm-linux-gnueabihf-gcc ./configure --host=arm-linux --prefix=$HOME/bbb --enable-static --disable-shared
+
+
+Building portmidi:
+
+cmake -DCMAKE_TOOLCHAIN_FILE=$HOME/bbb.cmake -DCMAKE_SYSTEM_PREFIX_PATH=$HOME/bbb -DCMAKE_INSTALL_PREFIX=$HOME/bbb ..
+
+cmake -DCMAKE_TOOLCHAIN_FILE=$HOME/bbb.cmake -DCMAKE_SYSTEM_PREFIX_PATH=$HOME/bbb -DCMAKE_INSTALL_PREFIX=$HOME/bbb -DBUILD_SHARED_LIBS=OFF ..
+
+
+Building the prog:
+
+CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=1 go build -v -o myprogram -ldflags="-extld=arm-linux-gnueabihf-gcc" .
+
+Building the Golang portmidi lib:
+
+CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=1 go build -v -o myprogram -ldflags="-extld=arm-linux-gnueabihf-gcc" .
+
+
+LD_LIBRARY_PATH=$HOME/bbb/lib:/lib:/usr/lib CGO_LDFLAGS=-L$HOME/bbb/lib CGO_CFLAGS=-I$HOME/bbb/include go run ./cmd/helloctlxl
+
+
+CGO_LDFLAGS=-L$HOME/bbb/lib,-L$HOME/arm-linux-gnueabihf/lib CGO_CFLAGS=-I$HOME/bbb/include go run ./cmd/helloctlxl
+
+Whoa, nearly there.
+
+CGO_LDFLAGS="-L$HOME/bbb/lib -lasound -latopology -ldl" CGO_CFLAGS=-I$HOME/bbb/include go run ./cmd/helloctlxl
+
+Get this:
+
+https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads/8-3-2019-03
+
+Now for rtmidi:
+
+LD=arm-linux-gnueabihf-ld CC=arm-linux-gnueabihf-gcc CXX=arm-linux-gnueabihf-g++ CFLAGS="-I$HOME/bbb/include" LDFLAGS="-L$HOME/bbb/lib -ldl -lpthread -lm" ./configure --with-alsa --host=arm-linux --prefix=$HOME/bbb --enable-static --disable-shared
+
+export CXX=arm-linux-gnueabihf-g++
+export LD=arm-linux-gnueabihf-ld
+export CC=arm-linux-gnueabihf-gcc
+export LDFLAGS="-L$HOME/bbb/lib -ldl -lpthread -lm -lstdc++"
+export CXXFLAGS="-I$HOME/bbb/include"
+
+
+OK that didn't work well, try this
+
+cmake -DCMAKE_TOOLCHAIN_FILE=$HOME/bbb.cmake -DCMAKE_SYSTEM_PREFIX_PATH=$HOME/bbb -DCMAKE_INSTALL_PREFIX=$HOME/bbb -DBUILD_SHARED_LIBS=OFF ..
+
+
+Had to add to the vendor dir the missing .h files, then edit the CGO preamble
+
+/*
+#cgo CXXFLAGS: -g -std=c++11 -I/home/debian/bbb/include
+#cgo LDFLAGS: -g
+
+#cgo linux CXXFLAGS: -D__LINUX_ALSA__
+#cgo linux LDFLAGS: -lasound -pthread -ldl
+*/

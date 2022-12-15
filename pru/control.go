@@ -110,7 +110,7 @@ func (r *RPMsgDevice) readControl() (*controlStruct, *Frameset, error) {
 func Main() error {
 	l, err := xl.Open()
 	if err != nil {
-		log.Fatalf("error while openning connection to launchctl: %v", err)
+		log.Fatalf("error while opening connection to launchctl: %v", err)
 	}
 	defer l.Close()
 
@@ -139,32 +139,98 @@ func Main() error {
 	go func() {
 		before := atomic.LoadUint32(&ctrl.frameCount)
 		for {
-			time.Sleep(time.Second)
+			time.Sleep(10 * time.Second)
 			after := atomic.LoadUint32(&ctrl.frameCount)
 			log.Println("frames/sec", after-before)
 			before = after
 		}
 	}()
 
-	set := func(r, g, b float64) {
-
-		for bankNo := 0; bankNo < 2; bankNo++ {
-			for frameNo := 0; frameNo < 256; frameNo++ {
-				for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
-					for pix := 0; pix < 64; pix++ {
+	setB := func(r, g, b float64) {
+		for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
+			for pix := 0; pix < 64; pix++ {
+				for bankNo := 0; bankNo < 2; bankNo++ {
+					for frameNo := 0; frameNo < 256; frameNo++ {
 						pixel := &(*frames)[bankNo][frameNo][dblrowNo][pix]
-						pixel.j1r1(rand.Float64() < r)
-						pixel.j1g1(rand.Float64() < g)
-						pixel.j1b1(rand.Float64() < b)
-						pixel.j1r2(rand.Float64() < r)
-						pixel.j1g2(rand.Float64() < g)
-						pixel.j1b2(rand.Float64() < b)
-						pixel.j3r1(rand.Float64() < r)
-						pixel.j3g1(rand.Float64() < g)
-						pixel.j3b1(rand.Float64() < b)
-						pixel.j3r2(rand.Float64() < r)
-						pixel.j3g2(rand.Float64() < g)
-						pixel.j3b2(rand.Float64() < b)
+						rnd := rand.Float64()
+						pixel.j1r1(rnd < r)
+						pixel.j1g1(rnd < g)
+						pixel.j1b1(rnd < b)
+						pixel.j1r2(rnd < r)
+						pixel.j1g2(rnd < g)
+						pixel.j1b2(rnd < b)
+						pixel.j3r1(rnd < r)
+						pixel.j3g1(rnd < g)
+						pixel.j3b1(rnd < b)
+						pixel.j3r2(rnd < r)
+						pixel.j3g2(rnd < g)
+						pixel.j3b2(rnd < b)
+					}
+				}
+			}
+		}
+	}
+	setL := func(r, g, b float64) {
+		var accum [12]float64
+		acc := func(pos int, inc float64) bool {
+			accum[pos] += inc
+			if accum[pos] >= 1 {
+				accum[pos] -= 1
+				return true
+			}
+			return false
+		}
+		for pix := 0; pix < 64; pix++ {
+			for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
+				for bankNo := 0; bankNo < 2; bankNo++ {
+					for frameNo := 0; frameNo < 256; frameNo++ {
+						pixel := &(*frames)[bankNo][frameNo][dblrowNo][pix]
+
+						pixel.j1r1(acc(0, r))
+						pixel.j1g1(acc(1, g))
+						pixel.j1b1(acc(2, b))
+						pixel.j1r2(acc(3, r))
+						pixel.j1g2(acc(4, g))
+						pixel.j1b2(acc(5, b))
+						pixel.j3r1(acc(6, r))
+						pixel.j3g1(acc(7, g))
+						pixel.j3b1(acc(8, b))
+						pixel.j3r2(acc(9, r))
+						pixel.j3g2(acc(10, g))
+						pixel.j3b2(acc(11, b))
+					}
+				}
+			}
+		}
+	}
+	setP := func(r, g, b float64) {
+		for pix := 0; pix < 64; pix++ {
+			for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
+				var accum [12]float64
+
+				acc := func(pos int, rate float64) bool {
+					if accum[pos] < 1 {
+						accum[pos] += rand.ExpFloat64() / rate
+					}
+					accum[pos]--
+					return accum[pos] < 1
+				}
+				for bankNo := 0; bankNo < 2; bankNo++ {
+					for frameNo := 0; frameNo < 256; frameNo++ {
+						pixel := &(*frames)[bankNo][frameNo][dblrowNo][pix]
+
+						pixel.j1r1(acc(0, r))
+						pixel.j1g1(acc(1, g))
+						pixel.j1b1(acc(2, b))
+						pixel.j1r2(acc(3, r))
+						pixel.j1g2(acc(4, g))
+						pixel.j1b2(acc(5, b))
+						pixel.j3r1(acc(6, r))
+						pixel.j3g1(acc(7, g))
+						pixel.j3b1(acc(8, b))
+						pixel.j3r2(acc(9, r))
+						pixel.j3g2(acc(10, g))
+						pixel.j3b2(acc(11, b))
 					}
 				}
 			}
@@ -175,7 +241,9 @@ func Main() error {
 	g := 0.05
 	b := 0.15
 
-	set(r, g, b)
+	focus := 0.0
+
+	setB(r, g, b)
 
 	l.AddCallback(xl.AllChannels, xl.ControlSlider[0], func(ch int, control xl.Control, value xl.Value) {
 		r = value.Float()
@@ -185,6 +253,15 @@ func Main() error {
 	})
 	l.AddCallback(xl.AllChannels, xl.ControlSlider[2], func(ch int, control xl.Control, value xl.Value) {
 		b = value.Float()
+	})
+	l.AddCallback(xl.AllChannels, xl.ControlButtonTrackFocus[0], func(ch int, control xl.Control, value xl.Value) {
+		focus = 0
+	})
+	l.AddCallback(xl.AllChannels, xl.ControlButtonTrackFocus[1], func(ch int, control xl.Control, value xl.Value) {
+		focus = 1
+	})
+	l.AddCallback(xl.AllChannels, xl.ControlButtonTrackFocus[2], func(ch int, control xl.Control, value xl.Value) {
+		focus = 2
 	})
 	go func() {
 		err := l.Run(context.Background())
@@ -196,8 +273,15 @@ func Main() error {
 
 	go func() {
 		for {
-			log.Println("Render", r, g, b)
-			set(r, g, b)
+			time.Sleep(25 * time.Millisecond)
+			switch focus {
+			case 0:
+				setL(r, g, b)
+			case 1:
+				setB(r, g, b)
+			case 2:
+				setP(r, g, b)
+			}
 		}
 	}()
 

@@ -62,3 +62,4 @@ export CGO_CFLAGS=-I/home/debian/bbb/include
 export CGO_CXXFLAGS=-I/home/debian/bbb/include
 ${GO} build -ldflags="-extldflags=-static" control.go
 
+# Note control has to run with super privileges

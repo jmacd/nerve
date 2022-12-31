@@ -60,6 +60,6 @@ export GO=/home/debian/go/bin/go
 export CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm"
 export CGO_CFLAGS=-I/home/debian/bbb/include
 export CGO_CXXFLAGS=-I/home/debian/bbb/include
-#${GO} build -ldflags="-extldflags=-static" control.go
+${GO} build -ldflags="-extldflags=-static" control.go
 
 # Note control has to run with super privileges

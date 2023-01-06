@@ -76,6 +76,13 @@ func Play() {
 	buf.Copy()
 }
 
+func choose(x uint64, b int, r uint32) uint32 {
+	if x&1<<b == 0 {
+		return 0
+	}
+	return r
+}
+
 func (b *Buffer) Copy() {
 
 	// offset is an unrolled position address for the first two loops,
@@ -166,6 +173,16 @@ func (b *Buffer) Copy() {
 
 					// 48 1-bit values ORed into 4 Gpio words.
 					// If vals[] & 1<<f is set for this frame.
+
+					dp.Gpio2 =
+						// J1-R1 is Gpio2 bit 2.
+						choose(vals[0], f, 1<<2)
+
+					dp.Gpio0 =
+						// J1-R2 is Gpio0 bit 23
+						choose(vals[1], f, 1<<23)
+
+					// etc.
 				}
 
 				// Step by 4 bytes per pixel (for each of 16 pixels per rowQuad).

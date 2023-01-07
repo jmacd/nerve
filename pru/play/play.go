@@ -26,6 +26,25 @@ type (
 	}
 )
 
+const (
+	J1_1 = 0
+	J1_2 = 1
+	J2_1 = 2
+	J2_2 = 3
+	J3_1 = 4
+	J3_2 = 5
+	J4_1 = 6
+	J4_2 = 7
+	J5_1 = 8
+	J5_2 = 9
+	J6_1 = 10
+	J6_2 = 11
+	J7_1 = 12
+	J7_2 = 13
+	J8_1 = 14
+	J8_2 = 15
+)
+
 const deviceGamma = 2.3 // TODO
 
 var degammaSix [256]uint8 = func() [256]uint8 {
@@ -76,19 +95,33 @@ func Play() {
 	buf.Copy()
 }
 
-func choose(x uint64, b int, r uint32) uint32 {
-	if x&1<<b == 0 {
+type frameBits [16]uint64
+
+func combine(vals ...uint32) uint32 {
+	if len(vals) == 0 {
 		return 0
 	}
-	return r
+	return vals[0] | combine(vals[1:]...)
+}
+
+func (f *frameBits) choose(position, frame, bit int) uint32 {
+	if (*f)[position]&(1<<frame) == 0 {
+		return 0
+	}
+	return 1 << bit
+}
+
+func pixelOffsetFor(rowSel, rowQuad, pos int) int {
+	panelX := pos / 8
+	panelY := pos % 8
+
+	pixY := (panelY * 16) + rowSel
+	pixX := (panelX * 64) + (rowQuad * 16)
+
+	return 128*pixY + pixX
 }
 
 func (b *Buffer) Copy() {
-
-	// offset is an unrolled position address for the first two loops,
-	// meaning it's the position of the pixel in rows 0-15 of the first
-	// panel.
-	offset := 0
 
 	for rowSel := 0; rowSel < 16; rowSel++ {
 
@@ -103,8 +136,6 @@ func (b *Buffer) Copy() {
 			var G [16][16]byte
 			var B [16][16]byte
 
-			segOffset := offset
-
 			// Here, step through 2 positions per panel
 			// for 8 panels to yield 16 runs of 16 RGB
 			// pixels.
@@ -113,10 +144,8 @@ func (b *Buffer) Copy() {
 				pG := &G[pos]
 				pB := &B[pos]
 
-				// @@@ TODO This offset calculation is incorrect
-				//
+				pixOffset := pixelOffsetFor(rowSel, rowQuad, pos)
 
-				pixOffset := segOffset
 				// Gruesome: the next loop should be
 				// done by a NEON 4-way extract
 				// instruction, discarding one output
@@ -127,9 +156,6 @@ func (b *Buffer) Copy() {
 					(*pB)[pix] = b.Pix[pixOffset+2]
 					pixOffset += 4
 				}
-
-				// Step by 4 bytes per pixel * 16 rows * 64
-				segOffset += 4 * 16 * 64
 			}
 
 			// Loop body covers 1/64th of the 2**14 pixel image
@@ -139,6 +165,7 @@ func (b *Buffer) Copy() {
 			// color channel.  768 bytes used (RGB), 256 bytes
 			// skipped (A).
 			//
+
 			// The first dimension 16 pixels have the same row
 			// selector & pixel number.  Each group translates into
 			// 64-frame time slices (using 6 of 8 bits per color
@@ -154,39 +181,47 @@ func (b *Buffer) Copy() {
 
 			// For each of 16 pixels:
 			for p := 0; p < 16; p++ {
-				// For each position:
-				var vals [48]uint64
+				var reds frameBits
+				var greens frameBits
+				var blues frameBits
 
 				for x := 0; x < 16; x++ {
-					vals[x] = sixBitPatterns[degammaSix[R[x][p]]]
-					vals[16+x] = sixBitPatterns[degammaSix[G[x][p]]]
-					vals[32+x] = sixBitPatterns[degammaSix[B[x][p]]]
+					reds[x] = sixBitPatterns[degammaSix[R[x][p]]]
+					greens[x] = sixBitPatterns[degammaSix[G[x][p]]]
+					blues[x] = sixBitPatterns[degammaSix[B[x][p]]]
 				}
-				// This gives us 48 8-bit values. Could
-				// be represented as bits in a uint64.
 
-				// For each timeslice, reduce to 6 bits
 				for f := 0; f < 64; f++ {
 					dp := &b.Schedule[f][rowSel][p+rowQuad*16]
-					// Rowselect is bits 12:15 of Gpio1
-					dp.Gpio1 = uint32(rowSel) << 12
 
-					// 48 1-bit values ORed into 4 Gpio words.
-					// If vals[] & 1<<f is set for this frame.
+					// TODO: this covers only 12 of 48 on panels J1, J3.
 
-					dp.Gpio2 =
-						// J1-R1 is Gpio2 bit 2.
-						choose(vals[0], f, 1<<2)
+					dp.Gpio1 = combine(
+						uint32(rowSel)<<12, // Rowselect is bits 12:15
+						reds.choose(J3_2, f, 16),
+						greens.choose(J3_1, f, 18),
+					)
 
-					dp.Gpio0 =
-						// J1-R2 is Gpio0 bit 23
-						choose(vals[1], f, 1<<23)
+					dp.Gpio2 = combine(
+						reds.choose(J1_1, f, 2),
+						greens.choose(J1_1, f, 3),
+						greens.choose(J1_2, f, 4),
+						blues.choose(J1_1, f, 5),
+					)
 
-					// etc.
+					dp.Gpio0 = combine(
+						greens.choose(J3_2, f, 3),
+						blues.choose(J3_2, f, 5),
+						reds.choose(J1_2, f, 23),
+						blues.choose(J1_2, f, 26),
+						reds.choose(J3_1, f, 30),
+						blues.choose(J3_1, f, 31),
+					)
+
+					dp.Gpio3 = combine(
+					// TODO: No J1/J3 bits here.
+					)
 				}
-
-				// Step by 4 bytes per pixel (for each of 16 pixels per rowQuad).
-				offset += 4
 			}
 		}
 	}

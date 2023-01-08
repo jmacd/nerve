@@ -130,8 +130,7 @@ func Main() error {
 	}
 
 	for bank := 0; bank < 4; bank++ {
-		fmt.Printf("dp.Gpio%d = ", bank)
-		matched := 0
+		fmt.Printf("dp.Gpio%d = combine(\n", bank)
 
 		for i, output := range c.Outputs {
 			for which, pin := range output.Pins {
@@ -149,14 +148,11 @@ func Main() error {
 					cname = "greens"
 				}
 				order := which[1]
-				if matched > 0 {
-					fmt.Print("|")
-				}
-				fmt.Printf("%s.choose(J%d_%c, f, %d)", cname, i+1, order, gpio.bit)
-				matched++
+				fmt.Printf("  %s.choose(J%d_%c, f, %d),\n", cname, i+1, order, gpio.bit)
 			}
 		}
-		fmt.Printf("\n")
+
+		fmt.Printf(")\n")
 	}
 
 	return nil

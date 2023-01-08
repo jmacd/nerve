@@ -199,12 +199,55 @@ func (b *Buffer) Copy() {
 					// uint32(rowSel)<<12, // Rowselect is bits 12:15
 					// to gpio1.
 
-					// 1310158 ns/op
-
-					// dp.Gpio0 = blues.choose(J1_2, f, 26) | reds.choose(J1_2, f, 23) | reds.choose(J2_1, f, 27) | blues.choose(J2_1, f, 22) | reds.choose(J3_1, f, 30) | blues.choose(J3_1, f, 31) | greens.choose(J3_2, f, 3) | blues.choose(J3_2, f, 5) | blues.choose(J4_2, f, 4) | reds.choose(J4_1, f, 2) | greens.choose(J4_1, f, 15) | greens.choose(J5_1, f, 11) | blues.choose(J5_1, f, 10) | reds.choose(J5_2, f, 9) | greens.choose(J5_2, f, 8) | greens.choose(J8_2, f, 14)
-					// dp.Gpio1 = greens.choose(J3_1, f, 18) | reds.choose(J3_2, f, 16) | blues.choose(J4_1, f, 17) | (uint32(rowSel) << 12)
-					// dp.Gpio2 = greens.choose(J1_2, f, 4) | reds.choose(J1_1, f, 2) | greens.choose(J1_1, f, 3) | blues.choose(J1_1, f, 5) | greens.choose(J2_1, f, 1) | reds.choose(J2_2, f, 22) | greens.choose(J2_2, f, 23) | blues.choose(J2_2, f, 24) | blues.choose(J5_2, f, 17) | reds.choose(J5_1, f, 25) | reds.choose(J6_1, f, 16) | greens.choose(J6_1, f, 15) | blues.choose(J6_1, f, 14) | reds.choose(J6_2, f, 13) | greens.choose(J6_2, f, 10) | blues.choose(J6_2, f, 12) | reds.choose(J7_1, f, 11) | greens.choose(J7_1, f, 9) | blues.choose(J7_1, f, 8) | reds.choose(J7_2, f, 6) | blues.choose(J7_2, f, 7)
-					// dp.Gpio3 = reds.choose(J4_2, f, 21) | greens.choose(J4_2, f, 19) | greens.choose(J7_2, f, 18) | reds.choose(J8_2, f, 14) | blues.choose(J8_2, f, 20) | reds.choose(J8_1, f, 17) | greens.choose(J8_1, f, 16) | blues.choose(J8_1, f, 15)
+					dp.Gpio0 = blues.choose(J1_2, f, 26) |
+						reds.choose(J1_2, f, 23) |
+						reds.choose(J2_1, f, 27) |
+						blues.choose(J2_1, f, 22) |
+						reds.choose(J3_1, f, 30) |
+						blues.choose(J3_1, f, 31) |
+						greens.choose(J3_2, f, 3) |
+						blues.choose(J3_2, f, 5) |
+						blues.choose(J4_2, f, 4) |
+						reds.choose(J4_1, f, 2) |
+						greens.choose(J4_1, f, 15) |
+						greens.choose(J5_1, f, 11) |
+						blues.choose(J5_1, f, 10) |
+						reds.choose(J5_2, f, 9) |
+						greens.choose(J5_2, f, 8) |
+						greens.choose(J8_2, f, 14)
+					dp.Gpio1 = greens.choose(J3_1, f, 18) |
+						reds.choose(J3_2, f, 16) |
+						blues.choose(J4_1, f, 17) |
+						(uint32(rowSel) << 12)
+					dp.Gpio2 = greens.choose(J1_2, f, 4) |
+						reds.choose(J1_1, f, 2) |
+						greens.choose(J1_1, f, 3) |
+						blues.choose(J1_1, f, 5) |
+						greens.choose(J2_1, f, 1) |
+						reds.choose(J2_2, f, 22) |
+						greens.choose(J2_2, f, 23) |
+						blues.choose(J2_2, f, 24) |
+						blues.choose(J5_2, f, 17) |
+						reds.choose(J5_1, f, 25) |
+						reds.choose(J6_1, f, 16) |
+						greens.choose(J6_1, f, 15) |
+						blues.choose(J6_1, f, 14) |
+						reds.choose(J6_2, f, 13) |
+						greens.choose(J6_2, f, 10) |
+						blues.choose(J6_2, f, 12) |
+						reds.choose(J7_1, f, 11) |
+						greens.choose(J7_1, f, 9) |
+						blues.choose(J7_1, f, 8) |
+						reds.choose(J7_2, f, 6) |
+						blues.choose(J7_2, f, 7)
+					dp.Gpio3 = reds.choose(J4_2, f, 21) |
+						greens.choose(J4_2, f, 19) |
+						greens.choose(J7_2, f, 18) |
+						reds.choose(J8_2, f, 14) |
+						blues.choose(J8_2, f, 20) |
+						reds.choose(J8_1, f, 17) |
+						greens.choose(J8_1, f, 16) |
+						blues.choose(J8_1, f, 15)
 				}
 			}
 		}

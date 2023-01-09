@@ -27,7 +27,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"sync/atomic"
 	"syscall"
@@ -35,6 +34,7 @@ import (
 	"unsafe"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/nerve/pru/gpixio"
 )
 
 const deviceName = "/dev/rpmsg_pru30"
@@ -51,17 +51,11 @@ type (
 		dmaWait       uint32
 	}
 
-	Frameset  [2]Framebank
-	Framebank [256]Framebuf
-	Framebuf  [16]DoubleRow
-	DoubleRow [64]DoublePixel
-
-	DoublePixel struct {
-		Gpio0 uint32
-		Gpio1 uint32
-		Gpio2 uint32
-		Gpio3 uint32
-	}
+	Frameset    = gpixio.Frameset
+	Schedule    = gpixio.Schedule
+	Frame       = gpixio.Frame
+	DoubleRow   = gpixio.DoubleRow
+	DoublePixel = gpixio.DoublePixel
 )
 
 func openRPMsgDevice() (*RPMsgDevice, error) {
@@ -129,106 +123,6 @@ func (r *RPMsgDevice) readControl() (*controlStruct, *Frameset, error) {
 	return ctrl, framebuf, nil
 }
 
-// setBernoulli sets the frameset to a solid color using a Bernoulli
-// trial for each color bit of each pixel.
-func (frames *Frameset) setBernoulli(r, g, b float64) {
-	for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
-		for pix := 0; pix < 64; pix++ {
-			for bankNo := 0; bankNo < 2; bankNo++ {
-				for frameNo := 0; frameNo < 256; frameNo++ {
-					pixel := &frames[bankNo][frameNo][dblrowNo][pix]
-					rnd := rand.Float64()
-					pixel.j1r1(rnd < r)
-					pixel.j1g1(rnd < g)
-					pixel.j1b1(rnd < b)
-					pixel.j1r2(rnd < r)
-					pixel.j1g2(rnd < g)
-					pixel.j1b2(rnd < b)
-					pixel.j3r1(rnd < r)
-					pixel.j3g1(rnd < g)
-					pixel.j3b1(rnd < b)
-					pixel.j3r2(rnd < r)
-					pixel.j3g2(rnd < g)
-					pixel.j3b2(rnd < b)
-				}
-			}
-		}
-	}
-}
-
-// setLinear sets the frameset to a solid uniform color using linear
-// spacing between (temporal) pixels.
-func (frames *Frameset) setLinear(r, g, b float64) {
-	var accum [12]float64
-	acc := func(pos int, inc float64) bool {
-		accum[pos] += inc
-		if accum[pos] >= 1 {
-			accum[pos] -= 1
-			return true
-		}
-		return false
-	}
-	for pix := 0; pix < 64; pix++ {
-		for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
-			for bankNo := 0; bankNo < 2; bankNo++ {
-				for frameNo := 0; frameNo < 256; frameNo++ {
-					pixel := &(*frames)[bankNo][frameNo][dblrowNo][pix]
-
-					pixel.j1r1(acc(0, r))
-					pixel.j1g1(acc(1, g))
-					pixel.j1b1(acc(2, b))
-					pixel.j1r2(acc(3, r))
-					pixel.j1g2(acc(4, g))
-					pixel.j1b2(acc(5, b))
-					pixel.j3r1(acc(6, r))
-					pixel.j3g1(acc(7, g))
-					pixel.j3b1(acc(8, b))
-					pixel.j3r2(acc(9, r))
-					pixel.j3g2(acc(10, g))
-					pixel.j3b2(acc(11, b))
-				}
-			}
-		}
-	}
-}
-
-// setPoisson uses a Poisson point process to fill in a color, and
-// although the random process is different the result is visually the
-// same as setBernoulli.
-func (frames *Frameset) setPoisson(r, g, b float64) {
-	for pix := 0; pix < 64; pix++ {
-		for dblrowNo := 0; dblrowNo < 16; dblrowNo++ {
-			var accum [12]float64
-
-			acc := func(pos int, rate float64) bool {
-				if accum[pos] < 1 {
-					accum[pos] += rand.ExpFloat64() / rate
-				}
-				accum[pos]--
-				return accum[pos] < 1
-			}
-			for bankNo := 0; bankNo < 2; bankNo++ {
-				for frameNo := 0; frameNo < 256; frameNo++ {
-					pixel := &(*frames)[bankNo][frameNo][dblrowNo][pix]
-
-					pixel.j1r1(acc(0, r))
-					pixel.j1g1(acc(1, g))
-					pixel.j1b1(acc(2, b))
-					pixel.j1r2(acc(3, r))
-					pixel.j1g2(acc(4, g))
-					pixel.j1b2(acc(5, b))
-					pixel.j3r1(acc(6, r))
-					pixel.j3g1(acc(7, g))
-					pixel.j3b1(acc(8, b))
-					pixel.j3r2(acc(9, r))
-					pixel.j3g2(acc(10, g))
-					pixel.j3b2(acc(11, b))
-				}
-			}
-		}
-	}
-}
-
 func Main() error {
 	l, err := xl.Open()
 	if err != nil {
@@ -274,7 +168,7 @@ func Main() error {
 
 	focus := 0.0
 
-	frames.setBernoulli(r, g, b)
+	//frames.setBernoulli(r, g, b)
 
 	// Sliders 0-2 control R, G, B
 	l.AddCallback(xl.AllChannels, xl.ControlSlider[0], func(ch int, control xl.Control, value xl.Value) {
@@ -305,16 +199,18 @@ func Main() error {
 	}()
 
 	go func() {
-		for {
-			time.Sleep(25 * time.Millisecond)
-			switch focus {
-			case 0:
-				frames.setLinear(r, g, b)
-			case 1:
-				frames.setBernoulli(r, g, b)
-			case 2:
-				frames.setPoisson(r, g, b)
-			}
+		buf := gpixio.NewBuffer()
+
+		_ = focus
+
+		for s := 0; ; s = (s + 1) % 8 {
+
+			buf.SetRGB(0.2, 0.2, 0.2)
+			buf.DrawCircle(64, 64, 50)
+			buf.SetRGB(r, g, b)
+			buf.Fill()
+
+			buf.Copy(&frames[s])
 		}
 	}()
 
@@ -326,31 +222,3 @@ func main() {
 		log.Println("error:", err)
 	}
 }
-
-func set(ptr *uint32, on bool, pos uint32) {
-	// var val uint32
-	// if on {
-	// 	val++
-	// }
-	// *ptr = (*ptr &^ (uint32(1) << pos)) | (val << pos)
-
-	if on {
-		*ptr |= 1 << pos
-	} else {
-		*ptr &= ^(1 << pos)
-	}
-}
-
-func (p *DoublePixel) j1r1(on bool) { set(&p.Gpio2, on, 2) }
-func (p *DoublePixel) j1g1(on bool) { set(&p.Gpio2, on, 3) }
-func (p *DoublePixel) j1g2(on bool) { set(&p.Gpio2, on, 4) }
-func (p *DoublePixel) j1b1(on bool) { set(&p.Gpio2, on, 5) }
-func (p *DoublePixel) j1r2(on bool) { set(&p.Gpio0, on, 23) }
-func (p *DoublePixel) j1b2(on bool) { set(&p.Gpio0, on, 26) }
-
-func (p *DoublePixel) j3r2(on bool) { set(&p.Gpio1, on, 16) }
-func (p *DoublePixel) j3g1(on bool) { set(&p.Gpio1, on, 18) }
-func (p *DoublePixel) j3g2(on bool) { set(&p.Gpio0, on, 3) }
-func (p *DoublePixel) j3b2(on bool) { set(&p.Gpio0, on, 5) }
-func (p *DoublePixel) j3r1(on bool) { set(&p.Gpio0, on, 30) }
-func (p *DoublePixel) j3b1(on bool) { set(&p.Gpio0, on, 31) }

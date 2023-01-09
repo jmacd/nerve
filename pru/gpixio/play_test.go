@@ -1,4 +1,4 @@
-package play
+package gpixio
 
 import "testing"
 

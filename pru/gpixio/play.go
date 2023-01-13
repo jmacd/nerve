@@ -4,8 +4,6 @@ import (
 	"image"
 	"math"
 	"math/bits"
-
-	"github.com/fogleman/gg"
 )
 
 type (
@@ -71,25 +69,16 @@ var sixBitPatterns [64]uint64 = func() [64]uint64 {
 
 type Buffer struct {
 	*image.RGBA
-	*gg.Context
 }
 
 func NewBuffer() *Buffer {
 	img := image.NewRGBA(image.Rect(0, 0, 128, 128))
 	return &Buffer{
-		RGBA:    img,
-		Context: gg.NewContextForRGBA(img),
+		RGBA: img,
 	}
 }
 
 type frameBits [16]uint64
-
-func combine(vals ...uint32) uint32 {
-	if len(vals) == 0 {
-		return 0
-	}
-	return vals[0] | combine(vals[1:]...)
-}
 
 func (f *frameBits) choose(position, frame, bit int) uint32 {
 	if (*f)[position]&(1<<frame) == 0 {

@@ -94,7 +94,7 @@ func pixelOffsetFor(rowSel, rowQuad, pos int) int {
 	pixY := (panelY * 16) + rowSel
 	pixX := (panelX * 64) + (rowQuad * 16)
 
-	return 128*pixY + pixX
+	return 4 * (128*pixY + pixX)
 }
 
 func (b *Buffer) Copy(schedule *Schedule) {

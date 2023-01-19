@@ -142,17 +142,36 @@ func Main() error {
 				switch {
 				case which[0] == 'r':
 					cname = "reds"
-				case which[0] == 'b':
-					cname = "blues"
 				case which[0] == 'g':
 					cname = "greens"
+				case which[0] == 'b':
+					cname = "blues"
 				}
 				order := which[1]
 				fmt.Printf("  %s.choose(J%d_%c, f, %d),\n", cname, i+1, order, gpio.bit)
 			}
 		}
-
 		fmt.Printf(")\n")
+	}
+
+	for i, output := range c.Outputs {
+		for which, pin := range output.Pins {
+			gpio := p2g[pin]
+
+			var add int
+			switch {
+			case which[0] == 'r':
+				add = 0
+			case which[0] == 'g':
+				add = 1
+			case which[0] == 'b':
+				add = 2
+			}
+
+			fmt.Printf("  if dp.Gpio%d & (1<<%d) != 0 {\n", gpio.bank, gpio.bit)
+			fmt.Printf("     add4(&img.Pix[j%d%cOff+%d])\n", i+1, which[1], add)
+			fmt.Printf("  }\n")
+		}
 	}
 
 	return nil

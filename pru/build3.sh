@@ -52,14 +52,12 @@ echo "Starting ..."
 echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
-echo "Building control.go"
-
-rm ./ledctrl
+echo "Building ledctrl"
 
 export GO=/home/debian/go/bin/go
 export CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm"
 export CGO_CFLAGS=-I/home/debian/bbb/include
 export CGO_CXXFLAGS=-I/home/debian/bbb/include
-${GO} build -ldflags="-extldflags=-static"  -o ledctrl ./control/control.go
+${GO} build -ldflags="-extldflags=-static"  -o ledctrl ./control
 
 # Note control has to run with super privileges

@@ -174,6 +174,10 @@ func (b *Buffer) Copy(schedule *Schedule) {
 					// ../cmd/mkmap.  Except add
 					// uint32(rowSel)<<12, // Rowselect is bits 12:15
 					// to gpio1.
+					//
+					// TODO The following works, i.e., subtracting
+					// one from the rowSel.  why?
+					// (uint32((rowSel+15)%16) << 12)
 
 					dp.Gpio0 = blues.choose(J1_2, f, 26) |
 						reds.choose(J1_2, f, 23) |
@@ -194,7 +198,7 @@ func (b *Buffer) Copy(schedule *Schedule) {
 					dp.Gpio1 = greens.choose(J3_1, f, 18) |
 						reds.choose(J3_2, f, 16) |
 						blues.choose(J4_1, f, 17) |
-						(uint32(rowSel) << 12)
+						(uint32((rowSel+15)%16) << 12)
 					dp.Gpio2 = greens.choose(J1_2, f, 4) |
 						reds.choose(J1_1, f, 2) |
 						greens.choose(J1_1, f, 3) |

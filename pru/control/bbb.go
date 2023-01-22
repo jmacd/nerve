@@ -54,11 +54,14 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 
 	go func() {
 		before := atomic.LoadUint32(&ctrl.frameCount)
+		last := time.Now()
 		for {
 			time.Sleep(10 * time.Second)
+			now := time.Now()
 			after := atomic.LoadUint32(&ctrl.frameCount)
-			log.Println("frames/sec", after-before)
+			log.Println("frames/sec", float64(after-before)/now.Sub(last).Seconds())
 			before = after
+			last = now
 		}
 	}()
 

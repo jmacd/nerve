@@ -308,7 +308,6 @@ void setRow(uint32_t on) {
   // Selector bits start at position 12 in gpio1
   gpio1[GPIO_SETDATAOUT] = on << 12;
   gpio1[GPIO_CLEARDATAOUT] = off << 12;
-  outputEnable(LO);
 }
 
 // toggleClock raises and lowers the HUB75 clock signal.
@@ -318,11 +317,11 @@ void toggleClock() {
 }
 
 // largeRows turns off the output before latching.  setRow will re-enable it.
-void latchRows() {
+void latchRows(uint32_t row) {
   outputEnable(HI);
-
   latch(HI);
   latch(LO);
+  outputEnable(LO);
 }
 
 // setPix writes 4 GPIO words.  they are expected to have the correct
@@ -368,15 +367,13 @@ void flash(int cbits, int howmany) {
     for (row = 0; row < FRAMEBUF_SCANS; row++) {
       uint32_t pix;
 
-      setRow(row);
-
       pixel.gpv1.bits.rowSelect = row;
 
       for (pix = 0; pix < FRAMEBUF_WIDTH; pix++) {
         setPix(&pixel);
         toggleClock();
       }
-      latchRows();
+      latchRows(row);
     }
   }
 }
@@ -768,8 +765,6 @@ void main(void) {
         uint32_t scan;
         for (scan = 0; scan < FRAMEBUF_SCANS_PER_PART; scan++, row++) {
 
-          setRow(row);
-
           uint32_t pix;
           // For 64 pixels width
           for (pix = 0; pix < 64; pix++) {
@@ -779,7 +774,7 @@ void main(void) {
             toggleClock();
           }
 
-          latchRows();
+          latchRows(row);
 
           // Slow down to see what's happening.
           // __delay_cycles(10000000);

@@ -4,6 +4,7 @@ package main
 
 import (
 	"image"
+	"time"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
@@ -21,6 +22,8 @@ type appState struct {
 	outputImage *canvas.Image
 
 	outputPixels *image.RGBA
+
+	bank uint32
 }
 
 func newAppState(buf *gpixio.Buffer) (*appState, error) {
@@ -48,17 +51,28 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	}, nil
 }
 
-func (state *appState) test(schedule int) {
-	testRender(&state.frames[schedule], state.outputPixels)
+func (state *appState) test(schedule *gpixio.Schedule) {
+	testRender(schedule, state.outputPixels)
 
 	canvas.Refresh(state.inputImage)
 	canvas.Refresh(state.outputImage)
+
+	time.Sleep(33 * time.Millisecond)
+}
+
+func (state *appState) finish(bank uint32) {
 }
 
 func (state *appState) run() error {
 	state.outputWindow.Show()
 	state.inputWindow.ShowAndRun()
 	return nil
+}
+
+func (state *appState) waitReady() uint32 {
+	b := state.bank
+	state.bank = b ^ 1
+	return b
 }
 
 func testRender(sched *gpixio.Schedule, img *image.RGBA) {

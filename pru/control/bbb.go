@@ -21,11 +21,27 @@ type RPMsgDevice struct {
 	file *os.File
 }
 
+// controlStruct should match ../control.h
 type controlStruct struct {
 	framebufsAddr uint32
 	framebufsSize uint32
 	frameCount    uint32
 	dmaWait       uint32
+
+	// readyBank is the next bank that the PRU will start.
+	readyBank uint32
+
+	// startBank is the most recent bank started by the PRU.
+	startBank uint32
+
+	// The ARM can be in two states:
+	// 1. Waiting for startBank to equal readyBank.
+	// 2. Writing to (readyBank^1) before updating readyBank.
+
+	// The PRU will update its "currentBank" to the readyBank when
+	// it reaches the end of a frame.  The PRU sets startBank to
+	// the currentBank when it starts a frame.
+
 }
 
 type appState struct {
@@ -72,12 +88,22 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	}, nil
 }
 
-func (state *appState) test(schedule int) {
+func (state *appState) test(schedule *Schedule) {
 	// No-op
+}
+
+func (state *appState) finish(bank int) {
+	state.readyBank = bank
 }
 
 func (state *appState) run() error {
 	select {}
+}
+
+func (state *appState) waitReady() uint32 {
+	for ctrl.readyBank != ctrl.startBank {
+	}
+	return ctrl.readyBank ^ 1
 }
 
 func openRPMsgDevice() (*RPMsgDevice, error) {

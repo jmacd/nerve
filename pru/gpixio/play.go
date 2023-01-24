@@ -7,7 +7,8 @@ import (
 )
 
 type (
-	Frameset  [8]Schedule
+	Frameset  [2]FrameBank
+	FrameBank [4]Schedule
 	Schedule  [64]Frame
 	Frame     [16]DoubleRow
 	DoubleRow [64]DoublePixel

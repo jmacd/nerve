@@ -65,6 +65,9 @@ struct control {
   volatile uint32_t framebufs_size;
   volatile uint32_t framecount;
   volatile uint32_t dma_wait;
+
+  volatile uint32_t ready_bank;
+  volatile uint32_t start_bank;
 };
 
 typedef union {

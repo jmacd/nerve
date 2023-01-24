@@ -143,6 +143,8 @@ struct ch_map pru_intc_map[] = {
     {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
 };
 
+control_t *global_ctrl;
+
 // my_resource_table describes the custom hardware settings used by
 // this program.
 struct my_resource_table {
@@ -470,9 +472,17 @@ void setup_dma_channel_zero() {
 //
 // TODO: This is a heavyweight setup, we should be able to use
 // transfer linking/chaining for a continuous loop.
-void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
-  if (currentBank == 1 && currentFrame == FRAMEBUF_FRAMES_PER_BANK - 1 && currentPart == FRAMEBUF_PARTS_PER_FRAME - 1) {
-    currentBank = 0;
+uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t currentFrame, uint32_t currentPart) {
+
+  int startOfBank = currentFrame == 0 && currentPart == 0;
+  int endOfBank = currentFrame == FRAMEBUF_FRAMES_PER_BANK - 1 && currentPart == FRAMEBUF_PARTS_PER_FRAME - 1;
+
+  if (startOfBank) {
+    global_ctrl->start_bank = currentBank;
+  }
+
+  if (endOfBank) {
+    currentBank = global_ctrl->ready_bank % 2; // % 2 is for safety
     currentFrame = 0;
     currentPart = 0;
   } else {
@@ -480,7 +490,7 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   }
   setup_param();
 
-  edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (localTargetBank * FRAMEBUF_PART_SIZE);
+  edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (nextLocalIndex * FRAMEBUF_PART_SIZE);
   edma_param_entry->src = resourceTable.framebufs.pa + (currentBank * FRAMEBUF_BANK_SIZE) +
                           (currentFrame * FRAMEBUF_FRAME_SIZE) + (currentPart * FRAMEBUF_PART_SIZE);
 
@@ -495,6 +505,8 @@ void start_dma(uint32_t localTargetBank, uint32_t currentBank, uint32_t currentF
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+
+  return currentBank
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -709,7 +721,8 @@ void send_to_arm() {
 // setup_controls builds the control struct.  The address of this is
 // passed to the ARM as a 4-byte write.
 control_t *setup_controls() {
-  control_t *ctrl = (control_t *)resourceTable.controls.pa;
+  global_ctrl = (control_t *)resourceTable.controls.pa;
+  memset(ctrl, 0, sizeof(control_t));
   ctrl->framebufs_addr = resourceTable.framebufs.pa;
   ctrl->framebufs_size = FRAMEBUF_TOTAL_SIZE;
   return ctrl;
@@ -734,15 +747,16 @@ void main(void) {
   local_banks[0] = (pixel_t *)0x10000;
   local_banks[1] = (pixel_t *)0x11000;
 
-  uint32_t bankno;
+  uint32_t unused;
 
   // Fill the first bank.
   start_dma(0, 1, FRAMEBUF_FRAMES_PER_BANK - 1, FRAMEBUF_PARTS_PER_FRAME - 1);
-  wait_dma(&bankno); // bankno is a dummy var
+  wait_dma(&unused);
 
   // For two banks
-  uint32_t localno = 0;
-  for (bankno = 0; 1; bankno ^= 1) {
+  uint32_t localIndex = 0;
+  uint32_t currentBank = 0;
+  while (1) {
     // For 256 frames per bank
     uint32_t frame;
     uint32_t restart_signaled = 0;
@@ -754,12 +768,12 @@ void main(void) {
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
 
-        pixel_t *pixptr = local_banks[localno];
+        pixel_t *pixptr = local_banks[localIndex];
 
-        localno ^= 1;
+        localIndex ^= 1;
 
         // Start a DMA to fill the next local bank.
-        start_dma(localno, bankno, frame, part);
+        currentBank = start_dma(localIndex, currentBank, frame, part);
 
         // For 4 scans per part
         uint32_t scan;

@@ -236,13 +236,13 @@ typedef union {
 
 #define CONTROLS_TOTAL_SIZE sizeof(control_t)
 
-struct pixel {
+struct dbl_pixel {
   gpio0_t gpv0;
   gpio1_t gpv1;
   gpio2_t gpv2;
   gpio3_t gpv3;
 };
 
-typedef struct pixel pixel_t;
+typedef struct dbl_pixel dbl_pixel_t;
 
 #endif

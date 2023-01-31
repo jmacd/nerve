@@ -21,15 +21,15 @@ echo stop > /sys/class/remoteproc/remoteproc1/state
 #echo stop > /sys/class/remoteproc/remoteproc2/state
 
 #make clean
-rm -rf output
-mkdir output
+#rm -rf output
+#mkdir output
 
-make output/pru.o PROC=pru TARGET=pru CHIP=AM335x
-make output/pru.out PROC=pru TARGET=pru CHIP=AM335x
+#make output/pru.o PROC=pru TARGET=pru CHIP=AM335x
+#make output/pru.out PROC=pru TARGET=pru CHIP=AM335x
 
-cp output/pru.out /lib/firmware/blink4-fw
+#cp output/pru.out /lib/firmware/blink4-fw
 
-echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
+#echo blink4-fw > /sys/class/remoteproc/remoteproc1/firmware
 #echo blink4-fw > /sys/class/remoteproc/remoteproc2/firmware
 
 configPins() {
@@ -49,15 +49,15 @@ configPins
 #sleep 1
 
 echo "Starting ..."
-echo start > /sys/class/remoteproc/remoteproc1/state
+#echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
 echo "Building ledctrl"
 
 export GO=/home/debian/go/bin/go
 export CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm"
-export CGO_CFLAGS=-I/home/debian/bbb/include
-export CGO_CXXFLAGS=-I/home/debian/bbb/include
+export CGO_CFLAGS="-I/home/debian/bbb/include -mfpu=neon"
+export CGO_CXXFLAGS="-I/home/debian/bbb/include"
 ${GO} build -ldflags="-extldflags=-static"  -o ledctrl ./control
 
 # Note control has to run with super privileges

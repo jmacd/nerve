@@ -75,7 +75,7 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 			time.Sleep(10 * time.Second)
 			now := time.Now()
 			after := atomic.LoadUint32(&ctrl.frameCount)
-			log.Println("frames/sec", float64(after-before)/now.Sub(last).Seconds())
+			log.Println("frames/sec", float64(after-before)/now.Sub(last).Seconds(), "bank", ctrl.readyBank)
 			before = after
 			last = now
 		}
@@ -92,8 +92,9 @@ func (state *appState) test(schedule *Schedule) {
 	// No-op
 }
 
-func (state *appState) finish(bank int) {
-	state.readyBank = bank
+func (state *appState) finish(bank uint32) {
+	//time.Sleep(time.Millisecond * 33)
+	state.ctrl.readyBank = bank
 }
 
 func (state *appState) run() error {
@@ -101,9 +102,9 @@ func (state *appState) run() error {
 }
 
 func (state *appState) waitReady() uint32 {
-	for ctrl.readyBank != ctrl.startBank {
+	for state.ctrl.readyBank != state.ctrl.startBank {
 	}
-	return ctrl.readyBank ^ 1
+	return state.ctrl.readyBank ^ 1
 }
 
 func openRPMsgDevice() (*RPMsgDevice, error) {

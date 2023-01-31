@@ -117,21 +117,24 @@ func Main() error {
 		_ = focus
 
 		for {
+			ggctx.DrawRectangle(0, 0, 128, 128)
+			ggctx.SetRGB(0.8, 0.8, 0)
+			ggctx.Fill()
+
+			ggctx.DrawCircle(64, 64, 60)
+			ggctx.SetRGB(r, g, b)
+			ggctx.Fill()
+
 			bank := state.waitReady()
 
+			t := time.Now()
 			for s := 0; s < 4; s++ {
-				ggctx.DrawRectangle(0, 0, 128, 128)
-				ggctx.SetRGB(0.8, 0.8, 0)
-				ggctx.Fill()
-
-				ggctx.DrawCircle(64, 64, 60)
-				ggctx.SetRGB(r, g, b)
-				ggctx.Fill()
-
 				buf.Copy(&state.frames[bank][s])
 
 				state.test(&state.frames[bank][s])
 			}
+			a := time.Now()
+			fmt.Println("render in", a.Sub(t))
 			state.finish(bank)
 		}
 	}()

@@ -32,8 +32,8 @@
 volatile register uint32_t __R30; // output register for PRU
 volatile register uint32_t __R31; // input/interrupt register for PRU
 
-#include "control.h"
 #include "edma.h"
+#include "gpixio/control.h"
 
 struct pru_rpmsg_transport rpmsg_transport;
 char rpmsg_payload[RPMSG_BUF_SIZE];
@@ -45,8 +45,8 @@ const uint32_t dmaChannelMask = (1 << 0);
 
 volatile edmaParam *edma_param_entry;
 
-pixel_t *frame_banks[2];
-pixel_t *local_banks[2];
+dbl_pixel_t *frame_banks[2];
+dbl_pixel_t *local_banks[2];
 
 // Set up the pointers to each of the GPIO ports
 uint32_t *const gpio0 = (uint32_t *)0x44e07000; // GPIO Bank 0  See Table 2.2 of TRM
@@ -328,7 +328,7 @@ void latchRows(uint32_t row) {
 
 // setPix writes 4 GPIO words.  they are expected to have the correct
 // row selector bits set (as well as clock, latch, and OE all low).
-void setPix(pixel_t *pixel) {
+void setPix(dbl_pixel_t *pixel) {
   gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
   gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
   gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
@@ -340,7 +340,7 @@ void setPix(pixel_t *pixel) {
 void flash(int cbits, int howmany) {
   uint32_t row;
 
-  pixel_t pixel;
+  dbl_pixel_t pixel;
   memset(&pixel, 0, sizeof(pixel));
 
   if (cbits & CBITS_GREEN) {
@@ -506,7 +506,7 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
 
-  return currentBank
+  return currentBank;
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -607,7 +607,7 @@ void init_test_buffer() {
   // Turn off CLK, OE, LATCH pins and set the correct row number
   // for each pixel.
   uint32_t pix, row;
-  pixel_t *pixptr = (pixel_t *)0x10000; // Base 8kB of PRU shared storage.
+  dbl_pixel_t *pixptr = (dbl_pixel_t *)0x10000; // Base 8kB of PRU shared storage.
 
   // The PRU-local storage is initialized with all blue pixels.  If
   // for some reason the DMA is not succesful, these pixels represent
@@ -640,7 +640,7 @@ void init_test_buffer() {
   for (bankno = 0; bankno < 2; bankno++) {
     // For 256 frames per bank
     uint32_t frame;
-    pixel_t *pixptr = (pixel_t *)(resourceTable.framebufs.pa + bankno * FRAMEBUF_BANK_SIZE);
+    dbl_pixel_t *pixptr = (dbl_pixel_t *)(resourceTable.framebufs.pa + bankno * FRAMEBUF_BANK_SIZE);
 
     for (frame = 0; frame < FRAMEBUF_FRAMES_PER_BANK; frame++) {
 
@@ -722,10 +722,10 @@ void send_to_arm() {
 // passed to the ARM as a 4-byte write.
 control_t *setup_controls() {
   global_ctrl = (control_t *)resourceTable.controls.pa;
-  memset(ctrl, 0, sizeof(control_t));
-  ctrl->framebufs_addr = resourceTable.framebufs.pa;
-  ctrl->framebufs_size = FRAMEBUF_TOTAL_SIZE;
-  return ctrl;
+  memset(global_ctrl, 0, sizeof(control_t));
+  global_ctrl->framebufs_addr = resourceTable.framebufs.pa;
+  global_ctrl->framebufs_size = FRAMEBUF_TOTAL_SIZE;
+  return global_ctrl;
 }
 
 void main(void) {
@@ -741,11 +741,11 @@ void main(void) {
 
   init_test_buffer();
 
-  frame_banks[0] = (pixel_t *)(resourceTable.framebufs.pa);
-  frame_banks[1] = (pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);
+  frame_banks[0] = (dbl_pixel_t *)(resourceTable.framebufs.pa);
+  frame_banks[1] = (dbl_pixel_t *)(resourceTable.framebufs.pa + FRAMEBUF_BANK_SIZE);
 
-  local_banks[0] = (pixel_t *)0x10000;
-  local_banks[1] = (pixel_t *)0x11000;
+  local_banks[0] = (dbl_pixel_t *)0x10000;
+  local_banks[1] = (dbl_pixel_t *)0x11000;
 
   uint32_t unused;
 
@@ -768,7 +768,7 @@ void main(void) {
       // For 4 parts per frame
       for (part = 0; part < FRAMEBUF_PARTS_PER_FRAME; part++) {
 
-        pixel_t *pixptr = local_banks[localIndex];
+        dbl_pixel_t *pixptr = local_banks[localIndex];
 
         localIndex ^= 1;
 

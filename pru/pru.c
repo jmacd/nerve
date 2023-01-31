@@ -33,7 +33,7 @@ volatile register uint32_t __R30; // output register for PRU
 volatile register uint32_t __R31; // input/interrupt register for PRU
 
 #include "edma.h"
-#include "gpixio/control.h"
+#include "gpixio/include/control.h"
 
 struct pru_rpmsg_transport rpmsg_transport;
 char rpmsg_payload[RPMSG_BUF_SIZE];

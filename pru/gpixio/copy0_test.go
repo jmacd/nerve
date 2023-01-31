@@ -19,6 +19,6 @@ func BenchmarkPlay(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buf.Copy(&fb)
+		buf.Copy0(&fb)
 	}
 }

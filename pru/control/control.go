@@ -41,7 +41,6 @@ var (
 
 type (
 	Frameset    = gpixio.Frameset
-	Schedule    = gpixio.Schedule
 	Frame       = gpixio.Frame
 	DoubleRow   = gpixio.DoubleRow
 	DoublePixel = gpixio.DoublePixel
@@ -128,11 +127,9 @@ func Main() error {
 			bank := state.waitReady()
 
 			t := time.Now()
-			for s := 0; s < 4; s++ {
-				buf.Copy(&state.frames[bank][s])
+			buf.Copy0(&state.frames[bank])
 
-				state.test(&state.frames[bank][s])
-			}
+			state.test(&state.frames[bank])
 			a := time.Now()
 			fmt.Println("render in", a.Sub(t))
 			state.finish(bank)
@@ -142,14 +139,6 @@ func Main() error {
 	return state.run()
 }
 
-func add4(bp *byte) {
-	(*bp) += 4 // 4 = 2 bits shifted (64 frames => 256 levels)
-
-	// overflow indicates max brightness, b/c we counted 4 per up to 64 frames
-	if *bp == 0 {
-		*bp = 255
-	}
-}
 func main() {
 	if err := Main(); err != nil {
 		log.Println("error:", err)

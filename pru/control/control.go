@@ -30,9 +30,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/fogleman/gg"
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/pru/gpixio"
+	"github.com/jmacd/nerve/pru/program/fractal"
 )
 
 var (
@@ -110,19 +110,24 @@ func Main() error {
 		}()
 	}
 
+	_ = r
+	_ = g
+	_ = b
+
 	go func() {
-		ggctx := gg.NewContextForRGBA(buf.RGBA)
+		//ggctx := gg.NewContextForRGBA(buf.RGBA)
 
 		_ = focus
 
 		for {
-			ggctx.DrawRectangle(0, 0, 128, 128)
-			ggctx.SetRGB(0.8, 0.8, 0)
-			ggctx.Fill()
+			// ggctx.DrawRectangle(0, 0, 128, 128)
+			// ggctx.SetRGB(0.8, 0.8, 0)
+			// ggctx.Fill()
 
-			ggctx.DrawCircle(64, 64, 60)
-			ggctx.SetRGB(r, g, b)
-			ggctx.Fill()
+			// ggctx.DrawCircle(64, 64, 60)
+			// ggctx.SetRGB(r, g, b)
+			// ggctx.Fill()
+			fractal.Fractal(buf.RGBA, fractal.Seeds[rand.Intn(len(fractal.Seeds))])
 
 			bank := state.waitReady()
 

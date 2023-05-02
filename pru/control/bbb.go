@@ -88,9 +88,9 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	}, nil
 }
 
-func (state *appState) test(schedule *Schedule) {
-	// No-op
-}
+// func (state *appState) test(schedule *Schedule) {
+// 	// No-op
+// }
 
 func (state *appState) finish(bank uint32) {
 	//time.Sleep(time.Millisecond * 33)

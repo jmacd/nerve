@@ -6,73 +6,50 @@ import (
 	"image/color"
 	"math"
 	"math/cmplx"
-	"runtime"
-)
-
-// Configuration
-const (
-	// Quality
-	imgWidth     = 128
-	imgHeight    = 128
-	maxIter      = 200
-	samples      = 50
-	hueOffset    = 0.0 // hsl color model; float in range [0,1)
-	linearMixing = true
+	"math/rand"
+	//"maze.io/x/math32/cmplx32"
 )
 
 const (
-	ratio = float64(imgWidth) / float64(imgHeight)
+	imgWidth  = 128
+	imgHeight = 128
+	maxIter   = 500
+	samples   = 1
+	hueOffset = 0.5 // hsl color model; float in range [0,1)
 )
 
 func Fractal(img *image.RGBA, loc Location) {
-	jobs := make(chan int)
-
-	for i := 0; i < runtime.NumCPU(); i++ {
-		go func() {
-			for y := range jobs {
-				for x := 0; x < imgWidth; x++ {
-					var r, g, b int
-					for i := 0; i < samples; i++ {
-						nx := 3*(1/loc.Zoom)*ratio*((float64(x)+RandFloat64())/float64(imgWidth)-0.5) + loc.XCenter
-						ny := 3*(1/loc.Zoom)*((float64(y)+RandFloat64())/float64(imgHeight)-0.5) - loc.YCenter
-						c := paint(mandelbrotIterComplex(nx, ny, maxIter))
-						if linearMixing {
-							r += int(RGBToLinear(c.R))
-							g += int(RGBToLinear(c.G))
-							b += int(RGBToLinear(c.B))
-						} else {
-							r += int(c.R)
-							g += int(c.G)
-							b += int(c.B)
-						}
-					}
-					var cr, cg, cb uint8
-					if linearMixing {
-						cr = LinearToRGB(uint16(float64(r) / float64(samples)))
-						cg = LinearToRGB(uint16(float64(g) / float64(samples)))
-						cb = LinearToRGB(uint16(float64(b) / float64(samples)))
-					} else {
-						cr = uint8(float64(r) / float64(samples))
-						cg = uint8(float64(g) / float64(samples))
-						cb = uint8(float64(b) / float64(samples))
-					}
-					img.SetRGBA(x, y, color.RGBA{R: cr, G: cg, B: cb, A: 255})
-				}
-			}
-		}()
-	}
-
+	rnd := rand.New(rand.NewSource(123))
+	_ = rnd
 	for y := 0; y < imgHeight; y++ {
-		jobs <- y
+		for x := 0; x < imgWidth; x++ {
+			var r, g, b int
+			for i := 0; i < samples; i++ {
+				///nx := (3/loc.Zoom)*((float64(x)+rnd.Float64())/float64(imgWidth)-0.5) + loc.XCenter
+				///ny := (3/loc.Zoom)*((float64(y)+rnd.Float64())/float64(imgHeight)-0.5) - loc.YCenter
+				nx := (3/loc.Zoom)*((float64(x)+0.5)/float64(imgWidth)-0.5) + loc.XCenter
+				ny := (3/loc.Zoom)*((float64(y)+0.5)/float64(imgHeight)+0.5) - loc.YCenter
+
+				c := paint(mandelbrotIterComplex(nx, ny, maxIter))
+				r += int(c.R)
+				g += int(c.G)
+				b += int(c.B)
+			}
+			var cr, cg, cb uint8
+			cr = uint8(float64(r) / float64(samples))
+			cg = uint8(float64(g) / float64(samples))
+			cb = uint8(float64(b) / float64(samples))
+			img.SetRGBA(x, y, color.RGBA{R: cr, G: cg, B: cb, A: 255})
+		}
 	}
 }
 
 func paint(magnitude float64, n int) color.RGBA {
 	if magnitude > 2 {
 		// adapted http://linas.org/art-gallery/escape/escape.html
-		nu := math.Log(math.Log(magnitude)) / math.Log(2)
-		hue := (float64(n)+1-nu)/float64(maxIter) + hueOffset
-		return hslToRGB(hue, 1, 0.5)
+		nu := math.Log(math.Log(float64(magnitude))) / math.Log(2)
+		hue := (float64(n)+1-float64(nu))/float64(maxIter) + hueOffset
+		return hslToRGB(float64(hue), 1, 0.5)
 	}
 
 	return color.RGBA{R: 0, G: 0, B: 0, A: 255}

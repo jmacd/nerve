@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	git.maze.io/go/math32 v0.0.0-20181106113604-c78ed91899f1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/fyne-io/mobile v0.1.2 // indirect
@@ -22,9 +23,11 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
 	gitlab.com/gomidi/midi/v2 v2.0.25 // indirect
-	golang.org/x/image v0.2.0 // indirect
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
-	golang.org/x/text v0.5.0 // indirect
+	golang.org/x/image v0.6.0 // indirect
+	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
+	gonum.org/v1/gonum v0.13.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
+	maze.io/x/math32 v0.0.0-20181106113604-c78ed91899f1 // indirect
 )

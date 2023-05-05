@@ -26,13 +26,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"image"
 	"log"
 	"math/rand"
 	"time"
 
+	"github.com/fogleman/gg"
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/fractal"
+	"gonum.org/v1/gonum/stat"
 )
 
 var (
@@ -115,11 +118,12 @@ func Main() error {
 	_ = b
 
 	go func() {
-		//ggctx := gg.NewContextForRGBA(buf.RGBA)
+		ggctx := gg.NewContextForRGBA(buf.RGBA)
 
 		_ = focus
+		_ = ggctx
 
-		for {
+		for iter := 0; ; iter++ {
 			// ggctx.DrawRectangle(0, 0, 128, 128)
 			// ggctx.SetRGB(0.8, 0.8, 0)
 			// ggctx.Fill()
@@ -127,7 +131,12 @@ func Main() error {
 			// ggctx.DrawCircle(64, 64, 60)
 			// ggctx.SetRGB(r, g, b)
 			// ggctx.Fill()
-			fractal.Fractal(buf.RGBA, fractal.Seeds[rand.Intn(len(fractal.Seeds))])
+
+			num := iter % len(fractal.Seeds)
+			start := time.Now()
+			fractal.Fractal(buf.RGBA, fractal.Seeds[num])
+			fmt.Println("fractal in", time.Now().Sub(start), imgEntropy(buf.RGBA))
+			time.Sleep(time.Second)
 
 			bank := state.waitReady()
 
@@ -142,6 +151,29 @@ func Main() error {
 	}()
 
 	return state.run()
+}
+
+func imgEntropy(img *image.RGBA) string {
+	var bins [3][256]uint16
+	for y := 0; y < 128; y++ {
+		for x := 0; x < 128; x++ {
+			px := img.RGBAAt(x, y)
+			bins[0][px.R]++
+			bins[1][px.G]++
+			bins[2][px.B]++
+		}
+	}
+	const total = 128 * 128
+
+	var ents [3]float64
+	for idx, hist := range bins {
+		var ps []float64
+		for _, cnt := range hist {
+			ps = append(ps, float64(cnt)/total)
+		}
+		ents[idx] = stat.Entropy(ps)
+	}
+	return fmt.Sprint("entropy", ents[0], ents[1], ents[2])
 }
 
 func main() {

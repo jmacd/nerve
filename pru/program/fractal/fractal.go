@@ -6,56 +6,81 @@ import (
 	"image/color"
 	"math"
 	"math/cmplx"
-	"math/rand"
+
 	//"maze.io/x/math32/cmplx32"
+	colorful "github.com/lucasb-eyer/go-colorful"
 )
 
 const (
 	imgWidth  = 128
 	imgHeight = 128
-	maxIter   = 500
-	samples   = 1
-	hueOffset = 0.5 // hsl color model; float in range [0,1)
+	maxIter   = 5000
 )
 
 func Fractal(img *image.RGBA, loc Location) {
-	rnd := rand.New(rand.NewSource(123))
-	_ = rnd
+	var (
+		iters   [128][128]float64
+		num     [maxIter + 2]uint16
+		escaped int
+	)
+
 	for y := 0; y < imgHeight; y++ {
 		for x := 0; x < imgWidth; x++ {
-			var r, g, b int
-			for i := 0; i < samples; i++ {
-				///nx := (3/loc.Zoom)*((float64(x)+rnd.Float64())/float64(imgWidth)-0.5) + loc.XCenter
-				///ny := (3/loc.Zoom)*((float64(y)+rnd.Float64())/float64(imgHeight)-0.5) - loc.YCenter
-				nx := (3/loc.Zoom)*((float64(x)+0.5)/float64(imgWidth)-0.5) + loc.XCenter
-				ny := (3/loc.Zoom)*((float64(y)+0.5)/float64(imgHeight)+0.5) - loc.YCenter
+			nx := (3/loc.Zoom)*((float64(x)+0.5)/float64(imgWidth)-0.5) + loc.XCenter
+			ny := (3/loc.Zoom)*((float64(y)+0.5)/float64(imgHeight)+0.5) - loc.YCenter
 
-				c := paint(mandelbrotIterComplex(nx, ny, maxIter))
-				r += int(c.R)
-				g += int(c.G)
-				b += int(c.B)
+			magnitude, iter := mandelbrot(nx, ny)
+
+			var smooth float64
+			if iter != maxIter {
+				smooth = normalizeIterations(magnitude, iter)
+				num[int(smooth)]++
+				escaped++
+			} else {
+				smooth = -1
 			}
-			var cr, cg, cb uint8
-			cr = uint8(float64(r) / float64(samples))
-			cg = uint8(float64(g) / float64(samples))
-			cb = uint8(float64(b) / float64(samples))
-			img.SetRGBA(x, y, color.RGBA{R: cr, G: cg, B: cb, A: 255})
+			iters[y][x] = float64(smooth)
+		}
+	}
+
+	var hues [maxIter + 2]float64
+	hue := 0.0
+	for i, cnt := range num {
+		hue += float64(cnt) / float64(escaped)
+		hues[i] = hue
+	}
+
+	for y := 0; y < imgHeight; y++ {
+		for x := 0; x < imgWidth; x++ {
+			smooth := iters[y][x]
+			if smooth == -1 {
+				img.SetRGBA(x, y, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+				continue
+			}
+			hue := 360 * linear(
+				hues[int(smooth)],
+				hues[int(smooth)+1],
+				float64(smooth)-float64(int(smooth)),
+			)
+			col := colorful.HSLuv(hue, 1, 0.7)
+			r, g, b := col.RGB255()
+			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 		}
 	}
 }
 
-func paint(magnitude float64, n int) color.RGBA {
-	if magnitude > 2 {
-		// adapted http://linas.org/art-gallery/escape/escape.html
-		nu := math.Log(math.Log(float64(magnitude))) / math.Log(2)
-		hue := (float64(n)+1-float64(nu))/float64(maxIter) + hueOffset
-		return hslToRGB(float64(hue), 1, 0.5)
-	}
-
-	return color.RGBA{R: 0, G: 0, B: 0, A: 255}
+func linear(low, high, frac float64) float64 {
+	return low + (high-low)*frac
 }
 
-func mandelbrotIterComplex(px, py float64, maxIter int) (float64, int) {
+func normalizeIterations(magnitude float64, iter int) float64 {
+	// from http://linas.org/art-gallery/escape/escape.html
+	// and/or https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set
+	nu := math.Log(math.Log(magnitude)) * math.Log2E
+	return float64(iter) + 1 - nu
+}
+
+func mandelbrot(px, py float64) (float64, int) {
 	var current complex128
 	pxpy := complex(px, py)
 

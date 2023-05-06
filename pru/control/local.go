@@ -35,11 +35,13 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	inputImage := canvas.NewImageFromImage(buf.RGBA)
 	inputImage.FillMode = canvas.ImageFillOriginal
 	inputWindow.SetContent(inputImage)
+	inputWindow.Resize(fyne.Size{Width: 768, Height: 768})
 
 	outputWindow := app.NewWindow("Visage")
 	outputImage := canvas.NewImageFromImage(outputPixels)
 	outputImage.FillMode = canvas.ImageFillOriginal
 	outputWindow.SetContent(outputImage)
+	outputWindow.Resize(fyne.Size{Width: 256, Height: 256})
 
 	return &appState{
 		frames:       &Frameset{},

@@ -72,10 +72,15 @@ func Main() error {
 	r := 0.8
 	g := 0.05
 	b := 0.15
+	pat := 0
 
 	focus := 0.0
 
 	if input != nil {
+		// Knob 1 controls patter
+		input.AddCallback(xl.AllChannels, xl.ControlKnobSendA[0], func(ch int, control xl.Control, value xl.Value) {
+			pat = int(value)
+		})
 		// Sliders 0-2 control R, G, B
 		input.AddCallback(xl.AllChannels, xl.ControlSlider[0], func(ch int, control xl.Control, value xl.Value) {
 			r = value.Float()
@@ -132,10 +137,9 @@ func Main() error {
 			// ggctx.SetRGB(r, g, b)
 			// ggctx.Fill()
 
-			num := iter % len(fractal.Seeds)
 			start := time.Now()
-			fractal.Fractal(buf.RGBA, fractal.Seeds[num])
-			fmt.Println("fractal in", time.Now().Sub(start), imgEntropy(buf.RGBA))
+			fractal.Fractal(buf.RGBA, fractal.Seeds[pat], r, g, b)
+			fmt.Println("fractal", pat, "in", time.Now().Sub(start), imgEntropy(buf.RGBA))
 			time.Sleep(time.Second)
 
 			bank := state.waitReady()

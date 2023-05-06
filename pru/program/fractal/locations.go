@@ -8,6 +8,11 @@ type Location struct {
 
 var Seeds = []Location{
 	{
+		XCenter: -0.25,
+		YCenter: 0,
+		Zoom:    1,
+	},
+	{
 		XCenter: -0.7463,
 		YCenter: 0.1102,
 		Zoom:    200,

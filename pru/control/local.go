@@ -53,16 +53,16 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	}, nil
 }
 
-func (state *appState) test(fb *gpixio.FrameBank) {
+func (state *appState) finish(bank uint32) {
+	fb := &state.frames[bank]
+
 	testRender(fb, state.outputPixels)
 
 	canvas.Refresh(state.inputImage)
 	canvas.Refresh(state.outputImage)
 
-	time.Sleep(33 * time.Millisecond)
-}
-
-func (state *appState) finish(bank uint32) {
+	// TODO: Avoids flicker.
+	time.Sleep(time.Millisecond * 50)
 }
 
 func (state *appState) run() error {

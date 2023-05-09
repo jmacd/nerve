@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"math"
 
-	//"maze.io/x/math32/cmplx32"
+	"github.com/jmacd/nerve/pru/program/data"
 	colorful "github.com/lucasb-eyer/go-colorful"
 )
 
@@ -17,14 +17,23 @@ const (
 )
 
 type Fractal struct {
+	locno int
 	iters [128][128]float64
 	hues  [maxIter + 2]float64
 }
 
-func New(loc Location) *Fractal {
+func New() *Fractal {
+	return &Fractal{
+		locno: -1,
+	}
+}
+
+func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
+	if f.locno == data.KnobsRow1[0] {
+		return
+	}
 	var num [maxIter + 2]uint16
 	var escaped int
-	f := &Fractal{}
 	for y := 0; y < imgHeight; y++ {
 		for x := 0; x < imgWidth; x++ {
 			nx := (3/loc.Zoom)*((float64(x)+0.5)/float64(imgWidth)-0.5) + loc.XCenter

@@ -5,16 +5,22 @@ import (
 	"sync"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/jmacd/nerve/pru/program/fractal"
 )
+
+type Program interface {
+	Draw(*data.Data, *image.RGBA)
+}
 
 type Player struct {
 	input *xl.LaunchControl
 	lock  sync.Mutex
-	pat   int
-	frac  *fractal.Fractal
 
-	r, g, b float64
+	playing  int
+	programs [16]Program
+
+	data.Data
 }
 
 func (p *Player) withLock(trigger xl.Control, callback func(control xl.Control, value xl.Value)) {
@@ -25,26 +31,44 @@ func (p *Player) withLock(trigger xl.Control, callback func(control xl.Control, 
 	})
 }
 
+type emptyProgram struct{}
+
+var _ Program = &emptyProgram{}
+
+func newEmptyProgram() Program {
+	return &emptyProgram{}
+}
+
 func New(input *xl.LaunchControl) *Player {
 	p := &Player{
 		input: input,
-		pat:   0,
-		frac:  nil,
 	}
 
-	p.withLock(xl.ControlKnobSendA[0], func(control xl.Control, value xl.Value) {
-		p.pat = int(value)
-		p.frac = nil
-	})
-	p.withLock(xl.ControlSlider[0], func(control xl.Control, value xl.Value) {
-		p.r = value.Float()
-	})
-	p.withLock(xl.ControlSlider[1], func(control xl.Control, value xl.Value) {
-		p.g = value.Float()
-	})
-	p.withLock(xl.ControlSlider[1], func(control xl.Control, value xl.Value) {
-		p.b = value.Float()
-	})
+	for i := range p.programs {
+		p.programs[i] = newEmptyProgram()
+	}
+
+	p.programs[p.playing] = fractal.New()
+
+	for i := 0; i < 0; i++ {
+		p.Data.Init(rnd)
+
+		p.withLock(xl.ControlKnobSendA[i], func(control xl.Control, value xl.Value) {
+			p.knobsRow1[i] = value
+		})
+		p.withLock(xl.ControlKnobSendB[i], func(control xl.Control, value xl.Value) {
+			p.knobsRow2[i] = value
+		})
+		p.withLock(xl.ControlKnobPanDevice[i], func(control xl.Control, value xl.Value) {
+			p.knobsRow3[i] = value
+		})
+		p.withLock(xl.ControlSlider[i], func(control xl.Control, value xl.Value) {
+			p.sliders[i] = value
+		})
+	}
+
+	// p.pat = int(value)
+	// p.frac = nil
 
 	return p
 }

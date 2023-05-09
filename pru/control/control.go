@@ -48,7 +48,7 @@ func Main() error {
 
 	var err error
 	input, err = xl.Open()
-	if err != nil {
+	if err != nil || input == nil {
 		return fmt.Errorf("error while opening connection to launchctl: %w", err)
 	}
 	defer input.Close()
@@ -59,9 +59,6 @@ func Main() error {
 		return err
 	}
 
-	if input == nil {
-		panic("Need input")
-	}
 	player := player.New(input)
 
 	go func() {

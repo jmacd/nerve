@@ -298,6 +298,10 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
+void pause() {
+  //__delay_cycles(100);
+}
+
 // setRow sets the 4-bit address into the row selector GPIO bits.
 //
 // Note latchRows starts with outputEnable(HI) and this ends with
@@ -310,27 +314,27 @@ void setRow(uint32_t on) {
   // Selector bits start at position 12 in gpio1
   gpio1[GPIO_SETDATAOUT] = on << 12;
   gpio1[GPIO_CLEARDATAOUT] = off << 12;
-  __delay_cycles(100);
+  pause();
 }
 
 // toggleClock raises and lowers the HUB75 clock signal.
 void toggleClock() {
-  __delay_cycles(100);
+  pause();
   clock(HI);
-  __delay_cycles(100);
+  pause();
   clock(LO);
 }
 
 // largeRows turns off the output before latching.  setRow will re-enable it.
 void latchRows(uint32_t row) {
   outputEnable(HI);
-  __delay_cycles(100);
+  pause();
   latch(HI);
-  __delay_cycles(100);
+  pause();
   latch(LO);
-  __delay_cycles(100);
+  pause();
   outputEnable(LO);
-  __delay_cycles(100);
+  pause();
 }
 
 // setPix writes 4 GPIO words.  they are expected to have the correct
@@ -340,7 +344,7 @@ void setPix(dbl_pixel_t *pixel) {
   gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
   gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
   gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
-  __delay_cycles(100);
+  pause();
 }
 
 // flash is used to display a solid 1-bit color as a warning or
@@ -626,18 +630,63 @@ void init_test_buffer() {
       pixptr->gpv1.bits.inputClock = 0;
       pixptr->gpv1.bits.outputEnable = 0;
       pixptr->gpv1.bits.inputLatch = 0;
-      pixptr->gpv0.bits.j3_r1 = 0;
-      pixptr->gpv1.bits.j3_g1 = 0;
-      pixptr->gpv0.bits.j3_b1 = 1;
-      pixptr->gpv1.bits.j3_r2 = 0;
-      pixptr->gpv0.bits.j3_g2 = 0;
-      pixptr->gpv0.bits.j3_b2 = 1;
+
       pixptr->gpv2.bits.j1_r1 = 0;
       pixptr->gpv2.bits.j1_g1 = 0;
       pixptr->gpv2.bits.j1_b1 = 1;
       pixptr->gpv0.bits.j1_r2 = 0;
       pixptr->gpv2.bits.j1_g2 = 0;
       pixptr->gpv0.bits.j1_b2 = 1;
+
+      pixptr->gpv0.bits.j2_r1 = 0;
+      pixptr->gpv2.bits.j2_g1 = 0;
+      pixptr->gpv0.bits.j2_b1 = 1;
+      pixptr->gpv2.bits.j2_r2 = 0;
+      pixptr->gpv2.bits.j2_g2 = 0;
+      pixptr->gpv2.bits.j2_b2 = 1;
+
+      pixptr->gpv0.bits.j3_r1 = 0;
+      pixptr->gpv1.bits.j3_g1 = 0;
+      pixptr->gpv0.bits.j3_b1 = 1;
+      pixptr->gpv1.bits.j3_r2 = 0;
+      pixptr->gpv0.bits.j3_g2 = 0;
+      pixptr->gpv0.bits.j3_b2 = 1;
+
+      pixptr->gpv0.bits.j4_r1 = 0;
+      pixptr->gpv0.bits.j4_g1 = 0;
+      pixptr->gpv1.bits.j4_b1 = 1;
+      pixptr->gpv3.bits.j4_r2 = 0;
+      pixptr->gpv3.bits.j4_g2 = 0;
+      pixptr->gpv0.bits.j4_b2 = 1;
+
+      pixptr->gpv2.bits.j5_r1 = 0;
+      pixptr->gpv0.bits.j5_g1 = 0;
+      pixptr->gpv0.bits.j5_b1 = 1;
+      pixptr->gpv0.bits.j5_r2 = 0;
+      pixptr->gpv0.bits.j5_g2 = 0;
+      pixptr->gpv2.bits.j5_b2 = 1;
+
+      pixptr->gpv2.bits.j6_r1 = 0;
+      pixptr->gpv2.bits.j6_g1 = 0;
+      pixptr->gpv2.bits.j6_b1 = 1;
+      pixptr->gpv2.bits.j6_r2 = 0;
+      pixptr->gpv2.bits.j6_g2 = 0;
+      pixptr->gpv2.bits.j6_b2 = 1;
+
+      pixptr->gpv2.bits.j7_r1 = 0;
+      pixptr->gpv2.bits.j7_g1 = 0;
+      pixptr->gpv2.bits.j7_b1 = 1;
+      pixptr->gpv2.bits.j7_r2 = 0;
+      pixptr->gpv3.bits.j7_g2 = 0;
+      pixptr->gpv2.bits.j7_b2 = 1;
+
+      pixptr->gpv3.bits.j8_r1 = 0;
+      pixptr->gpv3.bits.j8_g1 = 0;
+      pixptr->gpv3.bits.j8_b1 = 1;
+      pixptr->gpv3.bits.j8_r2 = 0;
+      pixptr->gpv0.bits.j8_g2 = 0;
+      pixptr->gpv3.bits.j8_b2 = 1;
+
       pixptr++;
     }
   }
@@ -667,7 +716,20 @@ void init_test_buffer() {
 
           uint32_t quad = (pix >> 4) & 1;
 
-          // J3
+          pixptr->gpv2.bits.j1_r1 = 1 ^ quad;
+          pixptr->gpv2.bits.j1_g1 = 0;
+          pixptr->gpv2.bits.j1_b1 = 0 ^ quad;
+          pixptr->gpv0.bits.j1_r2 = 0;
+          pixptr->gpv2.bits.j1_g2 = 0 ^ quad;
+          pixptr->gpv0.bits.j1_b2 = 1 ^ quad;
+
+          pixptr->gpv0.bits.j2_r1 = 1 ^ quad;
+          pixptr->gpv2.bits.j2_g1 = 0;
+          pixptr->gpv0.bits.j2_b1 = 0 ^ quad;
+          pixptr->gpv2.bits.j2_r2 = 0;
+          pixptr->gpv2.bits.j2_g2 = 0 ^ quad;
+          pixptr->gpv2.bits.j2_b2 = 1 ^ quad;
+
           pixptr->gpv0.bits.j3_r1 = 1 ^ quad;
           pixptr->gpv1.bits.j3_g1 = 0;
           pixptr->gpv0.bits.j3_b1 = 0 ^ quad;
@@ -675,13 +737,40 @@ void init_test_buffer() {
           pixptr->gpv0.bits.j3_g2 = 0 ^ quad;
           pixptr->gpv0.bits.j3_b2 = 1 ^ quad;
 
-          // J1
-          pixptr->gpv2.bits.j1_r1 = 1 ^ quad;
-          pixptr->gpv2.bits.j1_g1 = 0;
-          pixptr->gpv2.bits.j1_b1 = 0 ^ quad;
-          pixptr->gpv0.bits.j1_r2 = 0;
-          pixptr->gpv2.bits.j1_g2 = 0 ^ quad;
-          pixptr->gpv0.bits.j1_b2 = 1 ^ quad;
+          pixptr->gpv0.bits.j4_r1 = 1 ^ quad;
+          pixptr->gpv0.bits.j4_g1 = 0;
+          pixptr->gpv1.bits.j4_b1 = 0 ^ quad;
+          pixptr->gpv3.bits.j4_r2 = 0;
+          pixptr->gpv3.bits.j4_g2 = 0 ^ quad;
+          pixptr->gpv0.bits.j4_b2 = 1 ^ quad;
+
+          pixptr->gpv2.bits.j5_r1 = 1 ^ quad;
+          pixptr->gpv0.bits.j5_g1 = 0;
+          pixptr->gpv0.bits.j5_b1 = 0 ^ quad;
+          pixptr->gpv0.bits.j5_r2 = 0;
+          pixptr->gpv0.bits.j5_g2 = 0 ^ quad;
+          pixptr->gpv2.bits.j5_b2 = 1 ^ quad;
+
+          pixptr->gpv2.bits.j6_r1 = 1 ^ quad;
+          pixptr->gpv2.bits.j6_g1 = 0;
+          pixptr->gpv2.bits.j6_b1 = 0 ^ quad;
+          pixptr->gpv2.bits.j6_r2 = 0;
+          pixptr->gpv2.bits.j6_g2 = 0 ^ quad;
+          pixptr->gpv2.bits.j6_b2 = 1 ^ quad;
+
+          pixptr->gpv2.bits.j7_r1 = 1 ^ quad;
+          pixptr->gpv2.bits.j7_g1 = 0;
+          pixptr->gpv2.bits.j7_b1 = 0 ^ quad;
+          pixptr->gpv2.bits.j7_r2 = 0;
+          pixptr->gpv3.bits.j7_g2 = 0 ^ quad;
+          pixptr->gpv2.bits.j7_b2 = 1 ^ quad;
+
+          pixptr->gpv3.bits.j8_r1 = 1 ^ quad;
+          pixptr->gpv3.bits.j8_g1 = 0;
+          pixptr->gpv3.bits.j8_b1 = 0 ^ quad;
+          pixptr->gpv3.bits.j8_r2 = 0;
+          pixptr->gpv0.bits.j8_g2 = 0 ^ quad;
+          pixptr->gpv3.bits.j8_b2 = 1 ^ quad;
 
           pixptr++;
         }

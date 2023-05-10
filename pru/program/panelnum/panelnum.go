@@ -26,6 +26,6 @@ func (c *PanelNum) Draw(data *data.Data, img *image.RGBA) {
 	for i := 0; i < 8; i++ {
 		x := (i/4)*64 + 32
 		y := (i%4)*32 + 16
-		ggctx.DrawString(fmt.Sprint(i), float64(x), float64(y))
+		ggctx.DrawString(fmt.Sprint(i+1), float64(x), float64(y))
 	}
 }

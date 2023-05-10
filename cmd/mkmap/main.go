@@ -174,6 +174,69 @@ func Main() error {
 		}
 	}
 
+	for i, output := range c.Outputs {
+		fmt.Println("")
+		for _, which := range []string{"r1", "g1", "b1", "r2", "g2", "b2"} {
+			pin := output.Pins[which]
+			gpio := p2g[pin]
+
+			value := 0
+			if which[0] == 'b' {
+				value = 1
+			}
+			fmt.Printf("      pixptr->gpv%d.bits.j%d_%s = %d;\n", gpio.bank, i+1, which, value)
+		}
+	}
+
+	for i, output := range c.Outputs {
+		fmt.Println("")
+
+		for _, which := range []string{"r1", "g1", "b1", "r2", "g2", "b2"} {
+			pin := output.Pins[which]
+			gpio := p2g[pin]
+
+			value := map[string]string{
+				"r1": "1 ^ quad",
+				"g1": "0",
+				"b1": "0 ^ quad",
+				"r2": "0",
+				"g2": "0 ^ quad",
+				"b2": "1 ^ quad",
+			}[which]
+			fmt.Printf("      pixptr->gpv%d.bits.j%d_%s = %s;\n", gpio.bank, i+1, which, value)
+		}
+	}
+
+	for bank := 0; bank < 4; bank++ {
+		fmt.Println(`
+typedef union {
+  volatile uint32_t word;
+
+  volatile struct {`)
+		for bit := 0; bit < 32; bit++ {
+			found := false
+			for i, output := range c.Outputs {
+				for which, pin := range output.Pins {
+					gpio := p2g[pin]
+					if gpio.bank != bank {
+						continue
+					}
+					if gpio.bit != bit {
+						continue
+					}
+					fmt.Printf("    unsigned j%d_%s : 1; // %d\n", i+1, which, bit)
+					found = true
+				}
+			}
+			if !found {
+				fmt.Printf("    unsigned _bit%d : 1; // %d\n", bit, bit)
+			}
+		}
+
+		fmt.Printf("  } bits;\n")
+		fmt.Printf("} gpio%d_t;\n", bank)
+	}
+
 	return nil
 }
 

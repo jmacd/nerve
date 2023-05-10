@@ -17,21 +17,28 @@ const (
 )
 
 type Fractal struct {
-	locno int
-	iters [128][128]float64
-	hues  [maxIter + 2]float64
+	locNum int
+	iters  [128][128]float64
+	hues   [maxIter + 2]float64
 }
 
 func New() *Fractal {
 	return &Fractal{
-		locno: -1,
+		locNum: -1,
 	}
 }
 
 func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
-	if f.locno == data.KnobsRow1[0] {
-		return
+	locNum := int(data.KnobsRow1[0])
+	if f.locNum != locNum {
+		f.computeHues(locNum)
 	}
+	f.render(data, img)
+}
+
+func (f *Fractal) computeHues(locNum int) {
+	f.locNum = locNum
+	loc := Seeds[locNum%len(Seeds)]
 	var num [maxIter + 2]uint16
 	var escaped int
 	for y := 0; y < imgHeight; y++ {
@@ -51,16 +58,14 @@ func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
 		}
 	}
 
-	// var hues [maxIter + 2]float64
 	hue := 0.0
 	for i, cnt := range num {
 		hue += float64(cnt) / float64(escaped)
 		f.hues[i] = hue
 	}
-	return f
 }
 
-func (f *Fractal) Draw(img *image.RGBA, valA, valB, valC float64) {
+func (f *Fractal) render(data *data.Data, img *image.RGBA) {
 	for y := 0; y < imgHeight; y++ {
 		for x := 0; x < imgWidth; x++ {
 			smooth := f.iters[y][x]
@@ -74,7 +79,11 @@ func (f *Fractal) Draw(img *image.RGBA, valA, valB, valC float64) {
 				float64(smooth)-float64(int(smooth)),
 			)
 
-			col := colorful.HSLuv((hue+valA)*360, valB, valC)
+			col := colorful.HSLuv(
+				(hue+data.Sliders[0].Float())*360,
+				data.Sliders[1].Float(),
+				data.Sliders[2].Float(),
+			)
 			r, g, b := col.RGB255()
 			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 		}

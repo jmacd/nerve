@@ -20,7 +20,7 @@ echo "Stopping ..."
 echo stop > /sys/class/remoteproc/remoteproc1/state
 #echo stop > /sys/class/remoteproc/remoteproc2/state
 
-#make clean
+make clean
 rm -rf output
 mkdir output
 
@@ -43,23 +43,21 @@ configPins() {
     done
 }
 
-#sleep 1
+sleep 1
 
 configPins
-#sleep 1
+sleep 1
 
 echo "Starting ..."
 echo start > /sys/class/remoteproc/remoteproc1/state
 #echo start > /sys/class/remoteproc/remoteproc2/state
 
-echo "Building control.go"
-
-rm ./control
+echo "Building ledctrl"
 
 export GO=/home/debian/go/bin/go
 export CGO_LDFLAGS="-L/home/debian/bbb/lib -lasound -ldl -lm"
-export CGO_CFLAGS=-I/home/debian/bbb/include
-export CGO_CXXFLAGS=-I/home/debian/bbb/include
-${GO} build -ldflags="-extldflags=-static" control.go
+export CGO_CFLAGS="-I/home/debian/bbb/include -mfpu=neon"
+export CGO_CXXFLAGS="-I/home/debian/bbb/include"
+${GO} build -ldflags="-extldflags=-static"  -o ledctrl ./control
 
 # Note control has to run with super privileges

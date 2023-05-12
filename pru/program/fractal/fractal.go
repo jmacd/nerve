@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/pru/program/data"
 	colorful "github.com/lucasb-eyer/go-colorful"
 )
@@ -16,35 +17,55 @@ const (
 	maxIter   = 5000
 )
 
+type locSet struct {
+	num int
+	za  xl.Value
+	zb  xl.Value
+	zc  xl.Value
+	zd  xl.Value
+}
+
 type Fractal struct {
-	locNum int
-	iters  [128][128]float64
-	hues   [maxIter + 2]float64
+	loc   locSet
+	iters [128][128]float64
+	hues  [maxIter + 2]float64
 }
 
 func New() *Fractal {
 	return &Fractal{
-		locNum: -1,
+		loc: locSet{
+			num: -1,
+		},
 	}
 }
 
 func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
-	locNum := int(data.KnobsRow1[0])
-	if f.locNum != locNum {
-		f.computeHues(locNum)
+	loc := locSet{
+		num: int(data.KnobsRow1[0]),
+		za:  data.KnobsRow2[0],
+		zb:  data.KnobsRow2[1],
+		zc:  data.KnobsRow2[2],
+		zd:  data.KnobsRow2[3],
+	}
+	if f.loc != loc {
+		f.computeHues(loc)
 	}
 	f.render(data, img)
 }
 
-func (f *Fractal) computeHues(locNum int) {
-	f.locNum = locNum
-	loc := Seeds[locNum%len(Seeds)]
+func vary(knob xl.Value) float64 {
+	return knob.Float() + 0.5
+}
+
+func (f *Fractal) computeHues(loc locSet) {
+	f.loc = loc
+	seed := Seeds[loc.num%len(Seeds)]
 	var num [maxIter + 2]uint16
 	var escaped int
 	for y := 0; y < imgHeight; y++ {
 		for x := 0; x < imgWidth; x++ {
-			nx := (3/loc.Zoom)*((float64(x)+0.5)/float64(imgWidth)-0.5) + loc.XCenter
-			ny := (3/loc.Zoom)*((float64(y)+0.5)/float64(imgHeight)-0.5) - loc.YCenter
+			nx := (3/(seed.Zoom*vary(loc.za)))*((float64(x)+0.5)/float64(imgWidth)-0.5) + (seed.XCenter * vary(loc.zc))
+			ny := (3/(seed.Zoom*vary(loc.zb)))*((float64(y)+0.5)/float64(imgHeight)-0.5) - (seed.YCenter * vary(loc.zd))
 
 			smooth := mandelbrotSmooth(nx, ny)
 			if smooth != maxIter {

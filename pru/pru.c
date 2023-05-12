@@ -311,10 +311,10 @@ void setRow(uint32_t on) {
   // scan) use 0x1f for 5 address lines.
   uint32_t off = on ^ 0xf;
 
+  pause();
   // Selector bits start at position 12 in gpio1
   gpio1[GPIO_SETDATAOUT] = on << 12;
   gpio1[GPIO_CLEARDATAOUT] = off << 12;
-  pause();
 }
 
 // toggleClock raises and lowers the HUB75 clock signal.
@@ -327,6 +327,7 @@ void toggleClock() {
 
 // largeRows turns off the output before latching.  setRow will re-enable it.
 void latchRows(uint32_t row) {
+  pause();
   outputEnable(HI);
   pause();
   latch(HI);
@@ -334,17 +335,16 @@ void latchRows(uint32_t row) {
   latch(LO);
   pause();
   outputEnable(LO);
-  pause();
 }
 
 // setPix writes 4 GPIO words.  they are expected to have the correct
 // row selector bits set (as well as clock, latch, and OE all low).
 void setPix(dbl_pixel_t *pixel) {
+  pause();
   gpio0[GPIO_DATAOUT] = pixel->gpv0.word;
   gpio1[GPIO_DATAOUT] = pixel->gpv1.word;
   gpio2[GPIO_DATAOUT] = pixel->gpv2.word;
   gpio3[GPIO_DATAOUT] = pixel->gpv3.word;
-  pause();
 }
 
 // flash is used to display a solid 1-bit color as a warning or
@@ -606,10 +606,15 @@ void reset_hardware_state() {
   // Reset the local shared memory buffer.
   memset((void *)0x10000, 0, 0x3000);
 
+  pause();
   latch(LO);
+  pause();
   clock(LO);
+  pause();
   outputEnable(HI);
+  pause();
   setRow(0);
+  pause();
   outputEnable(LO);
 }
 

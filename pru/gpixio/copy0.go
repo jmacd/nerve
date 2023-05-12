@@ -39,15 +39,13 @@ const (
 	J8_2 = 15
 )
 
-const deviceGamma = 2.3 // TODO
-
-var degammaSix [256]uint8 = func() [256]uint8 {
+func degammaSix(gamma float64) [256]uint8 {
 	var d6 [256]uint8
 	for i := range d6 {
-		d6[i] = uint8(255*math.Pow(float64(i)/255, deviceGamma)) >> 2
+		d6[i] = uint8(255*math.Pow(float64(i)/255, gamma)) >> 2
 	}
 	return d6
-}()
+}
 
 var sixBitPatterns [64]uint64 = func() [64]uint64 {
 	var patterns [64]uint64
@@ -97,7 +95,8 @@ func pixelOffsetFor0(rowSel, rowQuad, pos int) int {
 	return 4 * (128*pixY + pixX)
 }
 
-func (b *Buffer) Copy0(fb *FrameBank) {
+func (b *Buffer) Copy0(gamma float64, fb *FrameBank) {
+	degamma := degammaSix(gamma)
 	for rowSel := 0; rowSel < 16; rowSel++ {
 
 		for rowQuad := 0; rowQuad < 4; rowQuad++ {
@@ -164,9 +163,9 @@ func (b *Buffer) Copy0(fb *FrameBank) {
 				// Hmm, sixBitPatterns lookup can use NEON vqtbl4q_u8
 				// but not degammaSix.  Hmm?
 				for x := 0; x < 16; x++ {
-					reds[x] = sixBitPatterns[degammaSix[R[x][p]]]
-					greens[x] = sixBitPatterns[degammaSix[G[x][p]]]
-					blues[x] = sixBitPatterns[degammaSix[B[x][p]]]
+					reds[x] = sixBitPatterns[degamma[R[x][p]]]
+					greens[x] = sixBitPatterns[degamma[G[x][p]]]
+					blues[x] = sixBitPatterns[degamma[B[x][p]]]
 				}
 
 				// For each of 64 timeslices.

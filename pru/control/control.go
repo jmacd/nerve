@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/fogleman/gg"
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/player"
@@ -75,54 +74,14 @@ func Main() error {
 
 			bank := state.waitReady()
 
-			//t := time.Now()
-			buf.Copy0(&state.frames[bank])
+			buf.Copy0(1+2*player.Data.KnobsRow1[7].Float(), &state.frames[bank])
 
-			//state.test(&state.frames[bank])
-			// a := time.Now()
-			// fmt.Println("render in", a.Sub(t))
 			state.finish(bank)
 		}
 	}()
 
 	return state.run()
 }
-
-func save() {
-	// ggctx.DrawRectangle(0, 0, 128, 128)
-	// ggctx.SetRGB(0.8, 0.8, 0)
-	// ggctx.Fill()
-
-	// ggctx.DrawCircle(64, 64, 60)
-	// ggctx.SetRGB(r, g, b)
-	// ggctx.Fill()
-	// Save
-	_ = gg.NewContextForRGBA(nil)
-
-}
-
-// func imgEntropy(img *image.RGBA) string {
-// 	var bins [3][256]uint16
-// 	for y := 0; y < 128; y++ {
-// 		for x := 0; x < 128; x++ {
-// 			px := img.RGBAAt(x, y)
-// 			bins[0][px.R]++
-// 			bins[1][px.G]++
-// 			bins[2][px.B]++
-// 		}
-// 	}
-// 	const total = 128 * 128
-
-// 	var ents [3]float64
-// 	for idx, hist := range bins {
-// 		var ps []float64
-// 		for _, cnt := range hist {
-// 			ps = append(ps, float64(cnt)/total)
-// 		}
-// 		ents[idx] = stat.Entropy(ps)
-// 	}
-// 	return fmt.Sprint("entropy", ents[0], ents[1], ents[2])
-// }
 
 func main() {
 	if err := Main(); err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/jmacd/nerve/pru/program/fractal"
 	"github.com/jmacd/nerve/pru/program/panelnum"
+	"github.com/jmacd/nerve/pru/program/panes"
 )
 
 type Program interface {
@@ -54,6 +55,7 @@ func New(input *xl.LaunchControl) *Player {
 	}
 
 	p.programs[0] = fractal.New()
+	p.programs[1] = panes.New()
 	p.programs[6] = circle.New()
 	p.programs[7] = panelnum.New()
 

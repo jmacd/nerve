@@ -54,7 +54,7 @@ func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
 }
 
 func vary(knob xl.Value) float64 {
-	return knob.Float() + 0.5
+	return 1 // knob.Float() + 0.5
 }
 
 func (f *Fractal) computeHues(loc locSet) {

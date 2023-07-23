@@ -40,6 +40,7 @@ char rpmsg_payload[RPMSG_BUF_SIZE];
 uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 
 // dmaChannel is 0 is mapped to PRU interrupt channel 9 by default.
+// @@@
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
@@ -128,38 +129,66 @@ uint32_t *const gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 #define CBITS_MAG (CBITS_RED | CBITS_BLUE)
 #define CBITS_WHITE (CBITS_RED | CBITS_GREEN | CBITS_BLUE)
 
-// Mapping sysevts to a channel. Each pair contains a sysevt, channel.
-struct ch_map pru_intc_map[] = {
-    // Interrupts to and from the ARM (virtio).
-    {SYSEVT_PRU_TO_ARM, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
-    {SYSEVT_ARM_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+#pragma DATA_SECTION(my_irq_rsc, ".pru_irq_map")
+#pragma RETAIN(my_irq_rsc)
 
-    // Interrupts to and from the EDMA.
-    {SYSEVT_EDMA_TO_PRU, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
-    {SYSEVT_PRU_TO_EDMA, HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA},
+#if 0
+struct pru_irq_rsc my_irq_rsc = {
+    // Mapping sysevts to a channel. Each pair contains a sysevt, channel.
+    0, /* type = 0 */
+    6, /* number of system events being mapped */
+    {
+        // Interrupts to and from the ARM (virtio).
+        {SYSEVT_PRU_TO_ARM, 2, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
+        {SYSEVT_ARM_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
 
-    // Error interrupts from EDMA on ARM->PRU channel.
-    {SYSEVT_EDMA_CTRL_ERROR_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
-    {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+        // Interrupts to and from the EDMA.
+        {SYSEVT_EDMA_TO_PRU, 1, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
+        {SYSEVT_PRU_TO_EDMA, 9, HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA},
+
+        // Error interrupts from EDMA on ARM->PRU channel.
+        {SYSEVT_EDMA_CTRL_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+        {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+    },
 };
+#else
+// This is a list of interrupts going to the PRU.
+struct pru_irq_rsc my_irq_rsc = {
+    // Mapping sysevts going to the PRU core. Each pair contains a
+    // sysevt, interrupt priority (typically matches host channel),
+    // and host channel.
+    0, /* type = 0 */
+    4, /* number of system events being mapped */
+    {
+        // Interrupts to and from the ARM (virtio).
+        {SYSEVT_ARM_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+
+        // Interrupts to and from the EDMA.
+        {SYSEVT_EDMA_TO_PRU, 1, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
+
+        // Error interrupts from EDMA on ARM->PRU channel.
+        {SYSEVT_EDMA_CTRL_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+        {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
+    },
+};
+#endif
 
 control_t *global_ctrl;
+
+#define NUM_RESOURCES 3
 
 // my_resource_table describes the custom hardware settings used by
 // this program.
 struct my_resource_table {
   struct resource_table base;
 
-  uint32_t offset[4]; // Should match 'num' in actual definition
+  uint32_t offset[NUM_RESOURCES]; // Should match 'num' in actual definition
 
-  struct fw_rsc_carveout framebufs; // Resource 0
-  struct fw_rsc_carveout controls;  // Resource 1
-
+  struct fw_rsc_carveout framebufs;      // Resource 0
+  struct fw_rsc_carveout controls;       // Resource 1
   struct fw_rsc_vdev rpmsg_vdev;         // Resource 2
   struct fw_rsc_vdev_vring rpmsg_vring0; // (cont)
   struct fw_rsc_vdev_vring rpmsg_vring1; // (cont)
-
-  struct fw_rsc_custom pru_ints; // Resource 3
 };
 
 #pragma DATA_SECTION(resourceTable, ".resource_table")
@@ -169,21 +198,20 @@ struct my_resource_table {
 struct my_resource_table resourceTable = {
     // resource_table base
     {
-        1,    // Resource table version: only version 1 is supported
-        4,    // Number of entries in the table (equals length of offset field).
-        0, 0, // Reserved zero fields
+        1,             // Resource table version: only version 1 is supported
+        NUM_RESOURCES, // Number of entries in the table (equals length of offset field).
+        0, 0,          // Reserved zero fields
     },
     // Entry offsets
     {
         offsetof(struct my_resource_table, framebufs),
         offsetof(struct my_resource_table, controls),
         offsetof(struct my_resource_table, rpmsg_vdev),
-        offsetof(struct my_resource_table, pru_ints),
     },
     // Carveout 1
     {
         (uint32_t)TYPE_CARVEOUT,       // type
-        (uint32_t)0,                   // da
+        (uint32_t)FW_RSC_ADDR_ANY,     // da
         (uint32_t)0,                   // pa
         (uint32_t)FRAMEBUF_TOTAL_SIZE, // len
         (uint32_t)0,                   // flags
@@ -193,14 +221,13 @@ struct my_resource_table resourceTable = {
     // Carveout 2
     {
         (uint32_t)TYPE_CARVEOUT,       // type
-        (uint32_t)0,                   // da
+        (uint32_t)FW_RSC_ADDR_ANY,     // da
         (uint32_t)0,                   // pa
         (uint32_t)CONTROLS_TOTAL_SIZE, // len
         (uint32_t)0,                   // flags
         (uint32_t)0,                   // reserved
         "controls",
     },
-
     // RPMsg virtual device
     {
         (uint32_t)TYPE_VDEV,             // type
@@ -215,56 +242,18 @@ struct my_resource_table resourceTable = {
     },
     // The two vring structs must be packed after the vdev entry.
     {
-        0,                  // da, will be populated by host, can't pass it in
+        FW_RSC_ADDR_ANY,    // da, will be populated by host, can't pass it in
         16,                 // align (bytes),
         PRU_RPMSG_VQ0_SIZE, // num of descriptors
         0,                  // notifyid, will be populated, can't pass right now
         0                   // reserved
     },
     {
-        0,                  // da, will be populated by host, can't pass it in
+        FW_RSC_ADDR_ANY,    // da, will be populated by host, can't pass it in
         16,                 // align (bytes),
         PRU_RPMSG_VQ1_SIZE, // num of descriptors
         0,                  // notifyid, will be populated, can't pass right now
         0                   // reserved
-    },
-    // Custom interrupt controller setup
-    {
-        TYPE_CUSTOM,
-        TYPE_PRU_INTS,
-        sizeof(struct fw_rsc_custom_ints),
-        {
-            // PRU_INTS version
-            PRU_INTS_VER0,
-
-            // See TRM 4.4.2.1.  There are 10 interrupt channels being
-            // mapped to hosts here.  The pru_intc_map struct maps
-            // system events to channels, and this struct maps them to
-            // hosts.  ARM and EDMA are the other hosts.
-            //
-            // The first two are output channels.
-            HOST_INTERRUPT_CHANNEL_ARM_TO_PRU,  // 0
-            HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU, // 1
-
-            // Two used output interrupt channels.
-            HOST_INTERRUPT_CHANNEL_PRU_TO_ARM, // 2
-
-            // Six unused interrupt output channels.
-            HOST_UNUSED, // 3
-            HOST_UNUSED, // 4
-            HOST_UNUSED, // 5
-            HOST_UNUSED, // 6
-            HOST_UNUSED, // 7
-            HOST_UNUSED, // 8
-
-            HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA, // 9
-
-            // Number of evts being mapped to channels.
-            (sizeof(pru_intc_map) / sizeof(struct ch_map)),
-
-            // The structure containing mapped events.
-            pru_intc_map,
-        },
     },
 };
 
@@ -378,6 +367,7 @@ void flash(int cbits, int howmany) {
 
   int count;
   for (count = 0; howmany < 0 || count < howmany; count++) {
+    //__delay_cycles(100000);
     for (row = 0; row < FRAMEBUF_SCANS; row++) {
       uint32_t pix;
 
@@ -500,6 +490,7 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   } else {
     currentPart++;
   }
+
   setup_param();
 
   edma_param_entry->dst = PRU_L4_FAST_SHARED_PRUSS_MEM + (nextLocalIndex * FRAMEBUF_PART_SIZE);
@@ -511,14 +502,16 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   edma_param_entry->abcnt.bcnt = 1;
   edma_param_entry->opt.tcc = dmaChannel;
 
-  // The equivalent blocking memory transfer:
-  // memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
+  // The equivalent blocking memory transfer: TODO: @@@ lol it's
+  // nearly as fast as the slowest DMA method, hard to get working.
+  memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
+
+  return currentBank;
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-  __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
-
-  return currentBank;
+  // __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+  // return currentBank;
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -548,6 +541,7 @@ uint32_t wait_dma(uint32_t *restart) {
     // Clear the interrupt event.  It could be one of two kinds of
     // error from the EDMA controller or it could be the ARM kicking.
     if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CTRL_ERROR_TO_PRU - 32))) {
+      warn(CBITS_BLUE);
       warn(CBITS_RED);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
@@ -557,14 +551,30 @@ uint32_t wait_dma(uint32_t *restart) {
       // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
 
+      /* warn(CBITS_BLUE); */
+      /* warn(CBITS_GREEN); */
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
     } else {
-      warn(CBITS_WHITE);
+      /* warn(CBITS_BLUE); */
+      /* warn(CBITS_WHITE); */
     }
+  } else {
+    // warn(CBITS_GREEN);
+    // warn(CBITS_WHITE);
   }
+
+#if 1
+  // Note: deferrede this until past the restart signal
+  if (1) {
+    *restart = 1;
+    return 0;
+  }
+#endif
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
     wait++;
+    warn(CBITS_GREEN);
+    warn(CBITS_YELLOW);
   }
 
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
@@ -796,8 +806,7 @@ void wait_for_virtio_ready() {
 void setup_transport() {
   // Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
   // at linux/drivers/rpmsg/rpmsg_pru.c
-  char *const channel_name = "rpmsg-pru";
-  char *const channel_desc = "Channel 30";
+  char channel_name[32] = "rpmsg-pru";
   const int channel_port = 30;
 
   // Initialize two vrings using system events on dedicated channels.
@@ -805,8 +814,7 @@ void setup_transport() {
                  SYSEVT_ARM_TO_PRU);
 
   // Create the RPMsg channel between the PRU and the ARM.
-  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &rpmsg_transport, channel_name, channel_desc, channel_port) !=
-         PRU_RPMSG_SUCCESS) {
+  while (pru_rpmsg_channel(RPMSG_NS_CREATE, &rpmsg_transport, channel_name, channel_port) != PRU_RPMSG_SUCCESS) {
   }
 }
 
@@ -899,9 +907,10 @@ void main(void) {
       }
 
       ctrl->framecount++;
-    }
-    if (restart_signaled != 0) {
-      send_to_arm();
+
+      if (restart_signaled != 0) {
+        send_to_arm();
+      }
     }
   }
 }

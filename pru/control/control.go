@@ -28,7 +28,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/jmacd/launchmidi/launchctl/xl"
+	//"github.com/jmacd/launchmidi/launchctl/xl"
+	xl "github.com/jmacd/nerve/pru/apc/mini"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/player"
 )
@@ -74,7 +75,7 @@ func Main() error {
 
 			bank := state.waitReady()
 
-			buf.Copy0(1+2*player.Data.KnobsRow1[7].Float(), &state.frames[bank])
+			buf.Copy0(1+2*player.Data.Slider9.Float(), &state.frames[bank])
 
 			state.finish(bank)
 		}

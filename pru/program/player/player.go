@@ -4,12 +4,14 @@ import (
 	"image"
 	"sync"
 
-	"github.com/jmacd/launchmidi/launchctl/xl"
+	//  "github.com/jmacd/launchmidi/launchctl/xl"
+	xl "github.com/jmacd/nerve/pru/apc/mini"
 	"github.com/jmacd/nerve/pru/program/circle"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/jmacd/nerve/pru/program/fractal"
 	"github.com/jmacd/nerve/pru/program/panelnum"
 	"github.com/jmacd/nerve/pru/program/panes"
+	"github.com/jmacd/nerve/pru/program/player/input"
 )
 
 type Program interface {
@@ -17,8 +19,8 @@ type Program interface {
 }
 
 type Player struct {
-	input *xl.LaunchControl
-	lock  sync.Mutex
+	inp  input.Input
+	lock sync.Mutex
 
 	playing  int
 	programs [16]Program
@@ -26,8 +28,8 @@ type Player struct {
 	data.Data
 }
 
-func (p *Player) withLock(trigger xl.Control, callback func(control xl.Control, value xl.Value)) {
-	p.input.AddCallback(xl.AllChannels, trigger, func(_ int, actual xl.Control, value xl.Value) {
+func (p *Player) withLock(trigger input.Control, callback func(control input.Control, value input.Value)) {
+	p.inp.AddCallback(0, trigger, func(_ int, actual input.Control, value input.Value) {
 		p.lock.Lock()
 		defer p.lock.Unlock()
 		callback(actual, value)
@@ -45,9 +47,9 @@ func newEmptyProgram() Program {
 func (e *emptyProgram) Draw(*data.Data, *image.RGBA) {
 }
 
-func New(input *xl.LaunchControl) *Player {
+func New(inp input.Input) *Player {
 	p := &Player{
-		input: input,
+		inp: inp,
 	}
 
 	for i := range p.programs {
@@ -61,43 +63,51 @@ func New(input *xl.LaunchControl) *Player {
 
 	p.Data.Init()
 
-	input.SetColor(0, xl.ControlButtonTrackFocus[0], xl.ColorBrightRed)
+	inp.SetColor(0, input.Control(xl.ControlButtonTrackFocus[0]), input.Color(xl.ColorBrightRed))
+
+	p.withLock(input.Control(xl.ControlSlider[8]), func(control input.Control, value input.Value) {
+		p.Data.Slider9 = value
+	})
 
 	for i := 0; i < 8; i++ {
 		i := i
-		p.withLock(xl.ControlKnobSendA[i], func(control xl.Control, value xl.Value) {
-			p.Data.KnobsRow1[i] = value
-		})
-		p.withLock(xl.ControlKnobSendB[i], func(control xl.Control, value xl.Value) {
-			p.Data.KnobsRow2[i] = value
-		})
-		p.withLock(xl.ControlKnobPanDevice[i], func(control xl.Control, value xl.Value) {
-			p.Data.KnobsRow3[i] = value
-		})
-		p.withLock(xl.ControlSlider[i], func(control xl.Control, value xl.Value) {
+		// p.withLock(input.Control(xl.ControlKnobSendA[i]), func(control input.Control, value input.Value) {
+		// 	p.Data.KnobsRow1[i] = value
+		// })
+		// p.withLock(input.Control(xl.ControlKnobSendB[i]), func(control input.Control, value input.Value) {
+		// 	p.Data.KnobsRow2[i] = value
+		// })
+		// p.withLock(input.Control(xl.ControlKnobPanDevice[i]), func(control input.Control, value input.Value) {
+		// 	p.Data.KnobsRow3[i] = value
+		// })
+		p.withLock(input.Control(xl.ControlSlider[i]), func(control input.Control, value input.Value) {
 			p.Data.Sliders[i] = value
+			p.Data.KnobsRow1[i] = value
+			p.Data.KnobsRow2[i] = value
+			p.Data.KnobsRow3[i] = value
+
 		})
-		p.withLock(xl.ControlButtonTrackFocus[i], func(control xl.Control, value xl.Value) {
+		p.withLock(input.Control(xl.ControlButtonTrackFocus[i]), func(control input.Control, value input.Value) {
 			if value == 0 {
 				return
 			}
 			if p.Data.ButtonsRadio == i {
 				return
 			}
-			input.SetColor(0, xl.ControlButtonTrackFocus[p.Data.ButtonsRadio], 0)
-			input.SetColor(0, control, xl.ColorBrightRed)
-			p.Data.ButtonsRadio = int(control - xl.ControlButtonTrackFocus[0])
+			inp.SetColor(0, input.Control(xl.ControlButtonTrackFocus[p.Data.ButtonsRadio]), 0)
+			inp.SetColor(0, control, input.Color(xl.ColorBrightRed))
+			p.Data.ButtonsRadio = int(control - input.Control(xl.ControlButtonTrackFocus[0]))
 		})
-		p.withLock(xl.ControlButtonTrackControl[i], func(control xl.Control, value xl.Value) {
+		p.withLock(input.Control(xl.ControlButtonTrackControl[i]), func(control input.Control, value input.Value) {
 			if value == 0 {
 				return
 			}
 			if p.Data.ButtonsToggle[i] {
 				p.Data.ButtonsToggle[i] = false
-				input.SetColor(0, xl.ControlButtonTrackControl[i], 0)
+				inp.SetColor(0, input.Control(xl.ControlButtonTrackControl[i]), 0)
 			} else {
 				p.Data.ButtonsToggle[i] = true
-				input.SetColor(0, xl.ControlButtonTrackControl[i], xl.ColorBrightYellow)
+				inp.SetColor(0, input.Control(xl.ControlButtonTrackControl[i]), input.Color(xl.ColorBrightYellow))
 			}
 		})
 	}

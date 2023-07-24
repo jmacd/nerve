@@ -5,8 +5,9 @@ go 1.19
 require (
 	fyne.io/fyne v1.4.3
 	github.com/fogleman/gg v1.3.0
-	github.com/jmacd/launchmidi v0.0.0-20221203062954-9a79ac9cf609
+	github.com/jmacd/go-artnet v0.0.0-20220707060336-6bfd9f54a67f
 	github.com/lucasb-eyer/go-colorful v1.2.0
+	gitlab.com/gomidi/midi/v2 v2.0.25
 )
 
 require (
@@ -22,7 +23,6 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
-	gitlab.com/gomidi/midi/v2 v2.0.25 // indirect
 	golang.org/x/image v0.6.0 // indirect
 	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect

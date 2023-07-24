@@ -4,16 +4,20 @@ package main
 
 import (
 	"image"
+	"os"
 	"time"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
+	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/jmacd/nerve/pru/gpixio"
 )
 
 type appState struct {
 	frames *Frameset
+	buf    *gpixio.Buffer
+	sender *artnet.Sender
 
 	inputWindow  fyne.Window
 	outputWindow fyne.Window
@@ -27,6 +31,12 @@ type appState struct {
 }
 
 func newAppState(buf *gpixio.Buffer) (*appState, error) {
+
+	var sender *artnet.Sender
+	if sendTo := os.Getenv("ARTNET_SENDTO"); sendTo != "" {
+		sender = artnet.NewSender(sendTo)
+	}
+
 	app := app.New()
 
 	outputPixels := image.NewRGBA(image.Rect(0, 0, 128, 128))
@@ -47,6 +57,9 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 		frames:       &Frameset{},
 		inputWindow:  inputWindow,
 		outputWindow: outputWindow,
+		buf:          buf,
+		sender:       sender,
+
 		inputImage:   inputImage,
 		outputImage:  outputImage,
 		outputPixels: outputPixels,
@@ -58,11 +71,15 @@ func (state *appState) finish(bank uint32) {
 
 	testRender(fb, state.outputPixels)
 
+	if state.sender != nil {
+		state.sender.Send(state.buf.RGBA)
+	}
+
 	canvas.Refresh(state.inputImage)
 	canvas.Refresh(state.outputImage)
 
-	// TODO: Avoids flicker.
-	time.Sleep(time.Millisecond * 50)
+	// TODO: Avoids flicker. @@@
+	time.Sleep(time.Millisecond * 200)
 }
 
 func (state *appState) run() error {
@@ -78,7 +95,6 @@ func (state *appState) waitReady() uint32 {
 }
 
 func testRender(fb *gpixio.FrameBank, img *image.RGBA) {
-
 	for i := 0; i < len(img.Pix); i += 4 {
 		img.Pix[i+0] = 0
 		img.Pix[i+1] = 0

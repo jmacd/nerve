@@ -552,7 +552,7 @@ uint32_t wait_dma(uint32_t *restart) {
       *restart = 1;
 
       /* warn(CBITS_BLUE); */
-      /* warn(CBITS_GREEN); */
+      warn(CBITS_GREEN);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
     } else {
       /* warn(CBITS_BLUE); */
@@ -564,9 +564,9 @@ uint32_t wait_dma(uint32_t *restart) {
   }
 
 #if 1
-  // Note: deferrede this until past the restart signal
+  // Note: deferred this until past the restart signal
   if (1) {
-    *restart = 1;
+    //*restart = 1;
     return 0;
   }
 #endif

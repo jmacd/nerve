@@ -2,6 +2,7 @@ package artnet
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"net"
 	"time"
@@ -37,7 +38,7 @@ func NewSender(ipAddr string) *Sender {
 	}
 }
 
-func (s *Sender) Send(buffer []Color) error {
+func (s *Sender) Send(buffer *image.RGBA) error {
 	err := s.send(buffer)
 	if err != nil {
 		now := time.Now()
@@ -49,7 +50,7 @@ func (s *Sender) Send(buffer []Color) error {
 	return err
 }
 
-func (s *Sender) send(buffer []Color) error {
+func (s *Sender) send(buffer *image.RGBA) error {
 	if s.conn == nil {
 		node, err := net.ResolveUDPAddr("udp", s.destStr)
 		if err != nil {
@@ -66,21 +67,20 @@ func (s *Sender) send(buffer []Color) error {
 
 	data := s.ArtDMXPacket.Data[:]
 	s.ArtDMXPacket.SubUni = 0
-	pixels := len(buffer)
+	pixels := buffer.Rect.Dx() * buffer.Rect.Dy()
 	for p := 0; p < pixels; {
 
 		num := maxPerPacket
 		if pixels-p < num {
 			num = pixels - p
 		}
-
 		for i := 0; i < num; i++ {
-			c := buffer[p+i]
-			data[i*3+0] = byte(c.R * 255)
-			data[i*3+1] = byte(c.G * 255)
-			data[i*3+2] = byte(c.B * 255)
+			pi := 4 * (p + i)
+			data[i*3+0] = buffer.Pix[pi+0]
+			data[i*3+1] = buffer.Pix[pi+1]
+			data[i*3+2] = buffer.Pix[pi+2]
 		}
-		s.ArtDMXPacket.Length = uint16(num)
+		s.ArtDMXPacket.Length = uint16(num * 3)
 
 		b, _ := s.ArtDMXPacket.MarshalBinary()
 
@@ -91,7 +91,6 @@ func (s *Sender) send(buffer []Color) error {
 			s.dest = nil
 			return fmt.Errorf("error writing packet: %v", err)
 		}
-
 		s.ArtDMXPacket.SubUni++
 		p += num
 	}

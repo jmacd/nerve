@@ -46,10 +46,10 @@ configPins() {
     done
 }
 
-sleep 1
+#sleep 1
 
 configPins
-sleep 1
+#sleep 1
 
 echo "Starting ..."
 echo start > /sys/class/remoteproc/remoteproc1/state

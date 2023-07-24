@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
-	"github.com/jmacd/nerve/artnet"
 	"github.com/jmacd/nerve/program"
 	"github.com/jmacd/nerve/program/tilesnake"
+	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/lucasb-eyer/go-colorful"
 )
 

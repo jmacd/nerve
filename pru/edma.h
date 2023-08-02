@@ -127,6 +127,8 @@ typedef struct {
 #define EDMA_DCHMAP_13 (0x134 / WORDSZ) // DMA Channel Mapping Register 13
 #define EDMA_DCHMAP_14 (0x138 / WORDSZ) // DMA Channel Mapping Register 14
 #define EDMA_DCHMAP_15 (0x13C / WORDSZ) // DMA Channel Mapping Register 15
+
+#define EDMA_DCHMAP_N(N) ((0x100 + (N << 2)) / WORDSZ)
 // ... (48 more)
 // 100h to 1FCh DCHMAP_0..63 DMA Channel Mapping Registers 0-63
 

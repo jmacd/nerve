@@ -18,6 +18,7 @@ cleanup()
 
 ps ax | grep user.out | awk '{print $1}' | xargs kill -9
 
+echo "Current state: " `cat /sys/class/remoteproc/remoteproc1/state`
 echo "Stopping ..."
 echo stop > /sys/class/remoteproc/remoteproc1/state
 #echo stop > /sys/class/remoteproc/remoteproc2/state

@@ -1,0 +1,22 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/am33xx-l4.h>
+
+&{/chosen} {
+        overlays {
+                PRUDMA.kernel = __TIMESTAMP__;
+        };
+};
+
+&pruss_tm {
+	pruss {
+                /* 0 and 1 for PRU-initiated DMAs */
+		dmas = <&edma 0 2>, <&edma 1 2>;
+		dma-names = "memcpy0", "memcpy1";
+	}
+}
+
+&edma {
+	ti,edma-reserved-slot-ranges = <64, 2>
+}

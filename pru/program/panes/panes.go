@@ -45,7 +45,7 @@ func (c *Panes) setColor(ggctx *gg.Context, data *data.Data, x, y, z float64) {
 func (c *Panes) Draw(data *data.Data, img *image.RGBA) {
 	ggctx := gg.NewContextForRGBA(img)
 
-	ggctx.DrawRectangle(0, 0, 64, 32)
+	ggctx.DrawRectangle(0, 0, 128, 64)
 	c.setColor(
 		ggctx,
 		data,
@@ -55,7 +55,7 @@ func (c *Panes) Draw(data *data.Data, img *image.RGBA) {
 	)
 	ggctx.Fill()
 
-	ggctx.DrawRectangle(0, 64, 64, 32)
+	ggctx.DrawRectangle(0, 64, 128, 64)
 	c.setColor(
 		ggctx,
 		data,

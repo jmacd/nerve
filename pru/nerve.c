@@ -40,7 +40,6 @@ char rpmsg_payload[RPMSG_BUF_SIZE];
 uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 
 // dmaChannel is 0 is mapped to PRU interrupt channel 9 by default.
-// @@@
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
@@ -287,9 +286,7 @@ void selB(int val) { set(gpio1, 13, val); }
 void selC(int val) { set(gpio1, 14, val); }
 void selD(int val) { set(gpio1, 15, val); }
 
-void pause() {
-  //__delay_cycles(100);
-}
+void pause() { __delay_cycles(10); }
 
 // setRow sets the 4-bit address into the row selector GPIO bits.
 //
@@ -427,42 +424,38 @@ void setup_param() {
 // setup_dma_channel_zero tries to reset and clear any pending
 // interrupt and error states before we start.
 void setup_dma_channel_zero() {
-  // Zero the PaRAM entries.
-  memset((void *)(EDMA_BASE + EDMA_PARAM_OFFSET / WORDSZ), 0, EDMA_PARAM_SIZE * EDMA_PARAM_NUM);
-
-  // Map Channel 0 to PaRAM 0
-  // DCHMAP_0 == DMA Channel 0 mapping to PaRAM set number 0.
-  EDMA_BASE[EDMA_DCHMAP_0] = dmaChannel;
-
   // Setup EDMA region access for Shadow Region 1
+  // Note the Linux kernel uses Shadow Region 0.
+  //
   // DRAE1 == DMA Region Access Enable shadow region 1.
-  EDMA_BASE[EDMA_DRAE1] |= dmaChannelMask;
+  //
+  // We enable a single channel in this region.
+  EDMA_BASE[EDMA_DRAE1] = dmaChannelMask;
 
-  // Setup channel to submit to EDMA TC0. Note DMAQNUM0 is for DMAQNUM0
-  // configures the channel controller for channels 0-7, the 0 in
-  // 0xfffffff0 corresponds with "E0" of DMAQNUM0 (TRM 11.4.1.6), i.e., DMA
-  // channel 0 maps to queue 0.
-  EDMA_BASE[EDMA_DMAQNUM_0] &= 0xFFFFFFF0;
+  // Map DMA Channel to PaRAM w/ same number.
+  EDMA_BASE[EDMA_DCHMAP_N(dmaChannel)] = dmaChannel << 5;
+
+  // Setup channel to submit to EDMA TC0 (highest priority).
+  //
+  // Note DMAQNUM_0 configures the channel controller for channels
+  // 0-7.  This is specific to channel 0.  0xfffffff8 is a mask to
+  // unset the least-significant 3 bits (i.e., channel 0).
+  EDMA_BASE[EDMA_DMAQNUM_0] &= 0xFFFFFFF8;
+
+  // Enable the interrupt in shadow region 1.
+  // This is DMA event 0, corresponds with PRU host interrupt 2.
+  // It must be enabled
+  EDMA_BASE[SHADOW1(EDMAREG_IESR)] = dmaChannel;
 
   // Clear interrupt and secondary event registers.
-  EDMA_BASE[SHADOW1(EDMAREG_SECR)] |= dmaChannelMask;
-  EDMA_BASE[SHADOW1(EDMAREG_ICR)] |= dmaChannelMask;
-
-  // Disable the queue watermark (in case that's triggering CCERR?)
-  EDMA_BASE[EDMA_QWMTHRA] = 0x11 | (0x11 << 8) | (0x11 << 16);
-
-  // Enable channel interrupt.
-  EDMA_BASE[SHADOW1(EDMAREG_IESR)] |= dmaChannelMask;
-
-  // Clear channel controller errors.  (Indiscriminantly. TODO: there
-  // are 2 distinct kinds of error here.)
-  EDMA_BASE[EDMA_CCERRCLR] |= 0xffffffff;
+  EDMA_BASE[SHADOW1(EDMAREG_SECR)] = dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_ICR)] = dmaChannelMask;
 
   // Enable channel for an event trigger.
-  EDMA_BASE[SHADOW1(EDMAREG_EESR)] |= dmaChannelMask;
+  EDMA_BASE[SHADOW1(EDMAREG_EESR)] = dmaChannelMask;
 
   // Clear event missed register.
-  EDMA_BASE[EDMA_EMCR] |= dmaChannelMask;
+  EDMA_BASE[EDMA_EMCR] = dmaChannelMask;
 
   setup_param();
 }
@@ -504,14 +497,14 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
 
   // The equivalent blocking memory transfer: TODO: @@@ lol it's
   // nearly as fast as the slowest DMA method, hard to get working.
-  memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
+  /* memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE); */
 
-  return currentBank;
+  /* return currentBank; */
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-  // __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
-  // return currentBank;
+  __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+  return currentBank;
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -907,10 +900,10 @@ void main(void) {
       }
 
       ctrl->framecount++;
+    }
 
-      if (restart_signaled != 0) {
-        send_to_arm();
-      }
+    if (restart_signaled != 0) {
+      send_to_arm();
     }
   }
 }

@@ -8,3 +8,12 @@ https://elixir.bootlin.com/linux/latest/source/Documentation/devicetree/bindings
 
 https://opencoursehub.cs.sfu.ca/bfraser/grav-cms/cmpt433/links/files/2018-student-howtos/WifiBeaglebone.pdf
 
+
+https://gitlab.com/brucechidester/pru-messaging-example
+
+w.t.f. the device tree had 
+							compatible = "ti,am3356-pru";
+vs
+							compatible = "ti,am3355-pru";
+							
+Needs to be 6.							

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	//"github.com/jmacd/launchmidi/launchctl/xl"
 	xl "github.com/jmacd/nerve/pru/apc/mini"
@@ -77,7 +78,7 @@ func Main() error {
 
 				state.finish(bank)
 				// yawn
-				//time.Sleep(time.Millisecond * 50)
+				time.Sleep(time.Second / 30)
 			}
 		}()
 

@@ -43,6 +43,8 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
+const int paramNumber = 100;
+
 volatile edmaParam *edma_param_entry;
 
 dbl_pixel_t *frame_banks[2];
@@ -131,26 +133,6 @@ uint32_t *const gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 #pragma DATA_SECTION(my_irq_rsc, ".pru_irq_map")
 #pragma RETAIN(my_irq_rsc)
 
-#if 0
-struct pru_irq_rsc my_irq_rsc = {
-    // Mapping sysevts to a channel. Each pair contains a sysevt, channel.
-    0, /* type = 0 */
-    6, /* number of system events being mapped */
-    {
-        // Interrupts to and from the ARM (virtio).
-        {SYSEVT_PRU_TO_ARM, 2, HOST_INTERRUPT_CHANNEL_PRU_TO_ARM},
-        {SYSEVT_ARM_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
-
-        // Interrupts to and from the EDMA.
-        {SYSEVT_EDMA_TO_PRU, 1, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
-        {SYSEVT_PRU_TO_EDMA, 9, HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA},
-
-        // Error interrupts from EDMA on ARM->PRU channel.
-        {SYSEVT_EDMA_CTRL_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
-        {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
-    },
-};
-#else
 // This is a list of interrupts going to the PRU.
 struct pru_irq_rsc my_irq_rsc = {
     // Mapping sysevts going to the PRU core. Each pair contains a
@@ -170,7 +152,6 @@ struct pru_irq_rsc my_irq_rsc = {
         {SYSEVT_EDMA_CHAN_ERROR_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
     },
 };
-#endif
 
 control_t *global_ctrl;
 
@@ -396,7 +377,7 @@ void park(int cbits) { flash(cbits, -1); }
 void setup_param() {
   // Setup and store PaRAM set for transfer.
   uint16_t paramOffset = EDMA_PARAM_OFFSET;
-  paramOffset += ((dmaChannel * EDMA_PARAM_SIZE) / WORDSZ);
+  paramOffset += ((paramNumber * EDMA_PARAM_SIZE) / WORDSZ);
 
   edma_param_entry = (volatile edmaParam *)(EDMA_BASE + paramOffset);
 
@@ -433,7 +414,7 @@ void setup_dma_channel_zero() {
   EDMA_BASE[EDMA_DRAE1] = dmaChannelMask;
 
   // Map DMA Channel to PaRAM w/ same number.
-  EDMA_BASE[EDMA_DCHMAP_N(dmaChannel)] = dmaChannel << 5;
+  EDMA_BASE[EDMA_DCHMAP_N(dmaChannel)] = paramNumber << 5;
 
   // Setup channel to submit to EDMA TC0 (highest priority).
   //
@@ -445,7 +426,7 @@ void setup_dma_channel_zero() {
   // Enable the interrupt in shadow region 1.
   // This is DMA event 0, corresponds with PRU host interrupt 2.
   // It must be enabled
-  EDMA_BASE[SHADOW1(EDMAREG_IESR)] = dmaChannel;
+  EDMA_BASE[SHADOW1(EDMAREG_IESR)] = dmaChannelMask;
 
   // Clear interrupt and secondary event registers.
   EDMA_BASE[SHADOW1(EDMAREG_SECR)] = dmaChannelMask;
@@ -459,6 +440,8 @@ void setup_dma_channel_zero() {
 
   setup_param();
 }
+
+#define USE_MEMCPY 0
 
 // start_dma calculates the address of the next block to transfer.
 // The inputs are bank, frame, and frame part that the PRU is
@@ -495,16 +478,23 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   edma_param_entry->abcnt.bcnt = 1;
   edma_param_entry->opt.tcc = dmaChannel;
 
+#if USE_MEMCPY
   // The equivalent blocking memory transfer: TODO: @@@ lol it's
   // nearly as fast as the slowest DMA method, hard to get working.
-  /* memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE); */
+  memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
 
-  /* return currentBank; */
+  return currentBank;
+#else
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
+#if 0
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
+#else
+  EDMA_BASE[SHADOW1(EDMAREG_ESR)] = dmaChannelMask;
+#endif
   return currentBank;
+#endif
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -525,38 +515,36 @@ uint32_t wait_dma(uint32_t *restart) {
   if (EDMA_BASE[EDMA_EMR]) {
     warn(CBITS_YELLOW);
   }
+
   if (EDMA_BASE[EDMA_EMRH]) {
     warn(CBITS_CYAN);
   }
 
-  if (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
+  while (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
     // Clear the interrupt event.  It could be one of two kinds of
     // error from the EDMA controller or it could be the ARM kicking.
     if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CTRL_ERROR_TO_PRU - 32))) {
-      warn(CBITS_BLUE);
-      warn(CBITS_RED);
+      warn(CBITS_GREEN);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
-      park(CBITS_BLUE);
+      warn(CBITS_BLUE);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
     } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
       // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
 
-      /* warn(CBITS_BLUE); */
-      warn(CBITS_GREEN);
+      warn(CBITS_RED);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
     } else {
       /* warn(CBITS_BLUE); */
-      /* warn(CBITS_WHITE); */
+      warn(CBITS_WHITE);
     }
-  } else {
-    // warn(CBITS_GREEN);
-    // warn(CBITS_WHITE);
+    // Seems a delay is needed to clear the interrupt.
+    __delay_cycles(2);
   }
 
-#if 1
+#if USE_MEMCPY
   // Note: deferred this until past the restart signal
   if (1) {
     //*restart = 1;
@@ -566,7 +554,7 @@ uint32_t wait_dma(uint32_t *restart) {
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
     wait++;
-    warn(CBITS_GREEN);
+    // warn(CBITS_GREEN);
     warn(CBITS_YELLOW);
   }
 
@@ -587,13 +575,24 @@ void reset_hardware_state() {
   // Enable PRU0 cycle counter.
   PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 
+  // Clear all system events.
+
+  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_ARM_TO_PRU; */
+  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_TO_PRU; */
+  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU; */
+  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU; */
+
+  /* CT_INTC.HIEISR_bit.HINT_EN_SET_IDX = HOST_INTERRUPT_CHANNEL_ARM_TO_PRU; */
+  /* CT_INTC.HIEISR_bit.HINT_EN_SET_IDX = HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU; */
+
   // Clear the system event mapped to the two input interrupts.
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
-  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_ARM;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
-  CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_EDMA;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
+
+  /* CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_ARM; */
+  /* CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_EDMA; */
 
   // Enable the EDMA (Transfer controller, Channel controller) clocks.
   CM_PER_BASE[CM_PER_TPTC0_CLKCTRL] = CM_PER_CLK_ENABLED;

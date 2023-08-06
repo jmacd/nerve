@@ -43,7 +43,7 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
-const int paramNumber = 100;
+const int paramNumber = 16;
 
 volatile edmaParam *edma_param_entry;
 
@@ -412,6 +412,7 @@ void setup_dma_channel_zero() {
   //
   // We enable a single channel in this region.
   EDMA_BASE[EDMA_DRAE1] = dmaChannelMask;
+  EDMA_BASE[EDMA_DRAE1] = 1 << paramNumber;
 
   // Map DMA Channel to PaRAM w/ same number.
   EDMA_BASE[EDMA_DCHMAP_N(dmaChannel)] = paramNumber << 5;
@@ -488,9 +489,13 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
 
   // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
+
+  // @@@ Both of these are behaving differently.
 #if 0
+  // Falls through to half-blue (uninitialized buffer) -- huh? -- so it's completing?
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
 #else
+  // Errors returned
   EDMA_BASE[SHADOW1(EDMAREG_ESR)] = dmaChannelMask;
 #endif
   return currentBank;
@@ -505,28 +510,33 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
 uint32_t wait_dma(uint32_t *restart) {
   uint32_t wait = 0;
 
-  // Note: understand how "omap_intc_handle_irq: spurious irq!" comes about (kernel 4.19?)
-  // Note: kernel is unhappy with "virtio_rpmsg_bus virtio0: msg received with no recipient"
-
-  if (EDMA_BASE[EDMA_CCERR] != 0) {
-    park(CBITS_CYAN);
-  }
-
-  if (EDMA_BASE[EDMA_EMR]) {
-    warn(CBITS_YELLOW);
-  }
-
-  if (EDMA_BASE[EDMA_EMRH]) {
-    warn(CBITS_CYAN);
-  }
-
   while (__R31 & PRU_R31_INTERRUPT_FROM_ARM) {
 
     // Clear the interrupt event.  It could be one of two kinds of
     // error from the EDMA controller or it could be the ARM kicking.
     if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CTRL_ERROR_TO_PRU - 32))) {
-      warn(CBITS_GREEN);
+      warn(CBITS_CYAN);
+
+      if (EDMA_BASE[EDMA_CCERR] != 0) {
+        park(CBITS_GREEN);
+      }
+
+      if (EDMA_BASE[EDMA_EMR] != 0) {
+        park(CBITS_YELLOW);
+      }
+      if (EDMA_BASE[EDMA_QEMR] != 0) {
+        park(CBITS_BLUE);
+      }
+
+      if (EDMA_BASE[EDMA_EMRH] != 0) {
+        park(CBITS_RED);
+      }
+
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
+      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
+
+      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
+
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
       warn(CBITS_BLUE);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
@@ -554,7 +564,7 @@ uint32_t wait_dma(uint32_t *restart) {
 
   while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
     wait++;
-    // warn(CBITS_GREEN);
+    warn(CBITS_GREEN);
     warn(CBITS_YELLOW);
   }
 

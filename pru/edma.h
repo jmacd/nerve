@@ -161,6 +161,7 @@ typedef struct {
 #define EDMA_QEMR (0x310 / WORDSZ)     // QDMA Event Missed Register Section 11.4.1.13
 #define EDMA_QEMCR (0x314 / WORDSZ)    // QDMA Event Missed Clear Register Section 11.4.1.14
 #define EDMA_CCERR (0x318 / WORDSZ)    // EDMA3CC Error Register Section 11.4.1.15
+#define EDMA_EEVAL (0x320 / WORDSZ)    // EDMA3CC EEVAL
 #define EDMA_CCERRCLR (0x31C / WORDSZ) // EDMA3CC Error Clear Register Section 11.4.1.16
 
 #define EDMA_DRAE0 (0x340 / WORDSZ)  // DMA Region Access Enable Register for Region 0 Section 11.4.1.18

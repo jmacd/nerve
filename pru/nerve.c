@@ -43,7 +43,8 @@ uint16_t rpmsg_src, rpmsg_dst, rpmsg_len;
 const int dmaChannel = 0;
 const uint32_t dmaChannelMask = (1 << 0);
 
-const int paramNumber = 16;
+// This is reserved in the kernel.
+const int paramNumber = 0;
 
 volatile edmaParam *edma_param_entry;
 
@@ -107,9 +108,6 @@ uint32_t *const gpio3 = (uint32_t *)0x481ae000; // GPIO Bank 3
 
 // (From the internet!)
 #define offsetof(st, m) ((uint32_t) & (((st *)0)->m))
-
-// Definition for unused interrupts
-#define HOST_UNUSED 255
 
 // HI and LO are abbreviations used below.
 #define HI 1
@@ -442,6 +440,8 @@ void setup_dma_channel_zero() {
   setup_param();
 }
 
+// USE_MEMCPY supports debugging EDMA.  This blocks the PRU to copy memory
+// which results in glitchy rendering.
 #define USE_MEMCPY 0
 
 // start_dma calculates the address of the next block to transfer.
@@ -480,24 +480,18 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   edma_param_entry->opt.tcc = dmaChannel;
 
 #if USE_MEMCPY
-  // The equivalent blocking memory transfer: TODO: @@@ lol it's
-  // nearly as fast as the slowest DMA method, hard to get working.
+  // Blocking memory transfer
   memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
 
-  return currentBank;
-#else
-
-  // Trigger transfer.  (4.4.1.2.2 Event Interface Mapping)
+#elseif 1
+  // Trigger transfer via INTC. (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
-
-  // @@@ Both of these are behaving differently.
-#if 0
-  // Falls through to half-blue (uninitialized buffer) -- huh? -- so it's completing?
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
 #else
-  // Errors returned
+  // Trigger transfer via EDMA register.
   EDMA_BASE[SHADOW1(EDMAREG_ESR)] = dmaChannelMask;
 #endif
+
   return currentBank;
 #endif
 }
@@ -533,19 +527,22 @@ uint32_t wait_dma(uint32_t *restart) {
       }
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
-      CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
 
       EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
 
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
       warn(CBITS_BLUE);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
+
+      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
     } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
       // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
 
       warn(CBITS_RED);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
+
+      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
     } else {
       /* warn(CBITS_BLUE); */
       warn(CBITS_WHITE);
@@ -562,11 +559,18 @@ uint32_t wait_dma(uint32_t *restart) {
   }
 #endif
 
-  while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
-    wait++;
-    warn(CBITS_GREEN);
-    warn(CBITS_YELLOW);
-  }
+  while
+#if 1
+    !(__R31 & PRU_R31_INTERRUPT_FROM_EDMA))
+#else
+      (EDMA_BASE[SHADOW1(EDMAREG_IPR)] & dmaChannelMask != 0)
+#endif
+  {
+      wait++;
+      warn(CBITS_GREEN);
+      warn(CBITS_YELLOW);
+      // break;
+    }
 
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
 
@@ -585,26 +589,26 @@ void reset_hardware_state() {
   // Enable PRU0 cycle counter.
   PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 
-  // Clear all system events.
+  // Enable the PRU-to-EDMA event
+  //
+  // See https://www.glennklockwood.com/embedded/beaglebone-pru.html
+  //
+  // See the TI am35xx PRU SDK's instructions for 5.10+ which explains
+  // that incoming events are configured through my_irq_rsc, except
+  // virtio, which is done by kernel for PRU-to-ARM & ARM-to-PRU.
 
-  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_ARM_TO_PRU; */
-  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_TO_PRU; */
-  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU; */
-  /* CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU; */
+  CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_PRU_TO_EDMA; // sysevt 18 / channel 9
+  CT_INTC.CMR4_bit.CH_MAP_18 = HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA;
+  CT_INTC.HMR2_bit.HINT_MAP_9 = HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA;
 
-  /* CT_INTC.HIEISR_bit.HINT_EN_SET_IDX = HOST_INTERRUPT_CHANNEL_ARM_TO_PRU; */
-  /* CT_INTC.HIEISR_bit.HINT_EN_SET_IDX = HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU; */
-
-  // Clear the system event mapped to the two input interrupts.
+  // Clear the system event mapped to the input interrupts.
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
 
-  /* CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_ARM; */
-  /* CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_PRU_TO_EDMA; */
-
   // Enable the EDMA (Transfer controller, Channel controller) clocks.
+  // TODO: Necessary? Probably the kernel does this.
   CM_PER_BASE[CM_PER_TPTC0_CLKCTRL] = CM_PER_CLK_ENABLED;
   CM_PER_BASE[CM_PER_TPCC_CLKCTRL] = CM_PER_CLK_ENABLED;
 

@@ -493,7 +493,6 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
 #endif
 
   return currentBank;
-#endif
 }
 
 // wait_dma as you see, has some bugs.  Most likely, the problems
@@ -552,25 +551,22 @@ uint32_t wait_dma(uint32_t *restart) {
   }
 
 #if USE_MEMCPY
-  // Note: deferred this until past the restart signal
-  if (1) {
-    //*restart = 1;
-    return 0;
-  }
+  // We are past the restart signal.
+  return 0;
 #endif
 
   while
 #if 1
-    !(__R31 & PRU_R31_INTERRUPT_FROM_EDMA))
+      (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA))
 #else
       (EDMA_BASE[SHADOW1(EDMAREG_IPR)] & dmaChannelMask != 0)
 #endif
   {
-      wait++;
-      warn(CBITS_GREEN);
-      warn(CBITS_YELLOW);
-      // break;
-    }
+    wait++;
+    warn(CBITS_GREEN);
+    warn(CBITS_YELLOW);
+    // break;
+  }
 
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;
 
@@ -600,6 +596,7 @@ void reset_hardware_state() {
   CT_INTC.EISR_bit.EN_SET_IDX = SYSEVT_PRU_TO_EDMA; // sysevt 18 / channel 9
   CT_INTC.CMR4_bit.CH_MAP_18 = HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA;
   CT_INTC.HMR2_bit.HINT_MAP_9 = HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA;
+  CT_INTC.HIEISR_bit.HINT_EN_SET_IDX = HOST_INTERRUPT_CHANNEL_PRU_TO_EDMA;
 
   // Clear the system event mapped to the input interrupts.
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;

@@ -511,29 +511,46 @@ uint32_t wait_dma(uint32_t *restart) {
       warn(CBITS_CYAN);
 
       if (EDMA_BASE[EDMA_CCERR] != 0) {
+        uint32_t ccerr = EDMA_BASE[EDMA_CCERR];
+        if (ccerr & 1 << 0) {
+          warn(CBITS_BLUE);
+        } else if (ccerr & 1 << 1) {
+          warn(CBITS_RED);
+        } else if (ccerr & 1 << 2) {
+          warn(CBITS_WHITE);
+        } else if (ccerr & 1 << 16) {
+          warn(CBITS_YELLOW);
+        }
         park(CBITS_GREEN);
       }
 
       if (EDMA_BASE[EDMA_EMR] != 0) {
+        warn(CBITS_BLUE);
         park(CBITS_YELLOW);
       }
       if (EDMA_BASE[EDMA_QEMR] != 0) {
+        warn(CBITS_BLUE);
         park(CBITS_BLUE);
       }
 
       if (EDMA_BASE[EDMA_EMRH] != 0) {
+        warn(CBITS_BLUE);
         park(CBITS_RED);
       }
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
 
       EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
+      EDMA_BASE[EDMA_EEVAL] = 1;
 
     } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
       warn(CBITS_BLUE);
+
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
 
       EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
+      EDMA_BASE[EDMA_EEVAL] = 1;
+
     } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
       // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
@@ -555,17 +572,10 @@ uint32_t wait_dma(uint32_t *restart) {
   return 0;
 #endif
 
-  while
-#if 1
-      (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA))
-#else
-      (EDMA_BASE[SHADOW1(EDMAREG_IPR)] & dmaChannelMask != 0)
-#endif
-  {
+  while (!(__R31 & PRU_R31_INTERRUPT_FROM_EDMA)) {
     wait++;
     warn(CBITS_GREEN);
     warn(CBITS_YELLOW);
-    // break;
   }
 
   CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_TO_PRU;

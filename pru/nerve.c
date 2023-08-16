@@ -139,10 +139,10 @@ struct pru_irq_rsc my_irq_rsc = {
     0, /* type = 0 */
     4, /* number of system events being mapped */
     {
-        // Interrupts to and from the ARM (virtio).
+        // Interrupts from the ARM (virtio).
         {SYSEVT_ARM_TO_PRU, 0, HOST_INTERRUPT_CHANNEL_ARM_TO_PRU},
 
-        // Interrupts to and from the EDMA.
+        // Interrupts from the EDMA.
         {SYSEVT_EDMA_TO_PRU, 1, HOST_INTERRUPT_CHANNEL_EDMA_TO_PRU},
 
         // Error interrupts from EDMA on ARM->PRU channel.
@@ -343,7 +343,6 @@ void flash(int cbits, int howmany) {
 
   int count;
   for (count = 0; howmany < 0 || count < howmany; count++) {
-    //__delay_cycles(100000);
     for (row = 0; row < FRAMEBUF_SCANS; row++) {
       uint32_t pix;
 
@@ -483,13 +482,10 @@ uint32_t start_dma(uint32_t nextLocalIndex, uint32_t currentBank, uint32_t curre
   // Blocking memory transfer
   memcpy((void *)edma_param_entry->dst, (void *)edma_param_entry->src, FRAMEBUF_PART_SIZE);
 
-#elseif 1
+#else
   // Trigger transfer via INTC. (4.4.1.2.2 Event Interface Mapping)
   // This is pr1_pru_mst_intr[2]_intr_req, system event 18
   __R31 = R31_INTERRUPT_ENABLE | (SYSEVT_PRU_TO_EDMA - R31_INTERRUPT_OFFSET);
-#else
-  // Trigger transfer via EDMA register.
-  EDMA_BASE[SHADOW1(EDMAREG_ESR)] = dmaChannelMask;
 #endif
 
   return currentBank;
@@ -525,9 +521,12 @@ uint32_t wait_dma(uint32_t *restart) {
       }
 
       if (EDMA_BASE[EDMA_EMR] != 0) {
-        warn(CBITS_BLUE);
+        if ((EDMA_BASE[EDMA_EMR] & 0x1) != 0) {
+          warn(CBITS_BLUE);
+        }
         park(CBITS_YELLOW);
       }
+
       if (EDMA_BASE[EDMA_QEMR] != 0) {
         warn(CBITS_BLUE);
         park(CBITS_BLUE);
@@ -539,32 +538,37 @@ uint32_t wait_dma(uint32_t *restart) {
       }
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;
+    }
 
-      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
-      EDMA_BASE[EDMA_EEVAL] = 1;
-
-    } else if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
+    if (CT_INTC.SECR1_bit.ENA_STS_63_32 & (1 << (SYSEVT_EDMA_CHAN_ERROR_TO_PRU - 32))) {
       warn(CBITS_BLUE);
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CHAN_ERROR_TO_PRU;
+    }
 
-      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
-      EDMA_BASE[EDMA_EEVAL] = 1;
-
-    } else if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
+    if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << SYSEVT_ARM_TO_PRU)) {
       // This means the control program restarted, needs to know carveout addresses.
       *restart = 1;
 
       warn(CBITS_RED);
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_ARM_TO_PRU;
 
-      EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
-    } else {
-      /* warn(CBITS_BLUE); */
-      warn(CBITS_WHITE);
+      // EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
     }
+
     // Seems a delay is needed to clear the interrupt.
-    __delay_cycles(2);
+    // warn(CBITS_YELLOW);
+
+    EDMA_BASE[EDMA_CCERRCLR] = 0xffffffff;
+    EDMA_BASE[SHADOW1(EDMAREG_ICR)] = dmaChannelMask;
+    EDMA_BASE[SHADOW1(EDMAREG_SECR)] = dmaChannelMask;
+
+    EDMA_BASE[EDMA_EEVAL] = 1;
+    /// EDMA_BASE[SHADOW1(EDMAREG_IEVAL)] = 0xffffffff;
+
+    // warn(CBITS_WHITE);
+
+    // __delay_cycles(2);
   }
 
 #if USE_MEMCPY

@@ -1,0 +1,43 @@
+diff --git a/arch/arm/boot/dts/am33xx-l4.dtsi b/arch/arm/boot/dts/am33xx-l4.dtsi
+index 2d16b2d9c86b..ba80048054dd 100644
+--- a/arch/arm/boot/dts/am33xx-l4.dtsi
++++ b/arch/arm/boot/dts/am33xx-l4.dtsi
+@@ -846,6 +846,9 @@ pruss: pruss@0 {
+                                #address-cells = <1>;
+                                #size-cells = <1>;
+                                ranges;
++                               /* 0 and 1 are fixed for PRU-initiated DMAs, see TRM ... */
++                               dmas = <&edma 0 2>, <&edma 1 2>;
++                               dma-names = "prucpy0", "prucpy1";
+ 
+                                pruss_mem: memories@0 {
+                                        reg = <0x0 0x2000>,
+@@ -902,13 +905,14 @@ pruss_mii_rt: mii-rt@32000 {
+                                pruss_intc: interrupt-controller@20000 {
+                                        compatible = "ti,pruss-intc";
+                                        reg = <0x20000 0x2000>;
+-                                       interrupts = <20 21 22 23 24 25 26 27>;
++                                       interrupts = <20 21 22 23 24 25 26>;
+                                        interrupt-names = "host_intr0", "host_intr1",
+                                                          "host_intr2", "host_intr3",
+                                                          "host_intr4", "host_intr5",
+-                                                         "host_intr6", "host_intr7";
++                                                         "host_intr6";
+                                        interrupt-controller;
+                                        #interrupt-cells = <3>;
++                                       ti,irqs-reserved = /bits/ 8 <0x80>; /* BIT(7) */
+                                };
+ 
+                                pru0: pru@34000 {
+diff --git a/arch/arm/boot/dts/am33xx.dtsi b/arch/arm/boot/dts/am33xx.dtsi
+index 7f3ff48eb277..3acc11651faa 100644
+--- a/arch/arm/boot/dts/am33xx.dtsi
++++ b/arch/arm/boot/dts/am33xx.dtsi
+@@ -232,6 +232,7 @@ edma: dma@0 {
+                                           <&edma_tptc2 0>;
+ 
+                                ti,edma-memcpy-channels = <20 21>;
++                               ti,edma-reserved-slot-ranges = <0 4>;
+                        };
+                };
+ 

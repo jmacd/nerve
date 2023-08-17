@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
+/*
+ * Copyright (C) Josh MacDonald
+ */
+
 /dts-v1/;
 /plugin/;
-
-#include <dt-bindings/pinctrl/am33xx-l4.h>
-#include <dt-bindings/pinctrl/am33xx.h>
 
 &{/chosen} {
         overlays {
@@ -27,17 +29,11 @@
                                          "host_intr4", "host_intr5",
                                          "host_intr6";
 			interrupts = <20 21 22 23 24 25 26>;
-	        }
-	}
-}
+	        };
+	};
+};
 
 /* in am33xx.dtsi */
 &edma {
 	ti,edma-reserved-slot-ranges = <0 4>;
-}
-
-
-
-
-
-
+};

@@ -9,6 +9,7 @@ import (
 	"github.com/jmacd/nerve/pru/program/circle"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/jmacd/nerve/pru/program/fractal"
+	"github.com/jmacd/nerve/pru/program/openmic"
 	"github.com/jmacd/nerve/pru/program/panelnum"
 	"github.com/jmacd/nerve/pru/program/panes"
 )
@@ -57,6 +58,7 @@ func New(inp controller.Input) *Player {
 
 	p.programs[0] = fractal.New()
 	p.programs[1] = panes.New()
+	p.programs[2] = openmic.New()
 	p.programs[6] = circle.New()
 	p.programs[7] = panelnum.New()
 
@@ -64,27 +66,19 @@ func New(inp controller.Input) *Player {
 
 	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
 
-	// p.withLock(controller.Control(xl.ControlSlider[8]), func(control controller.Control, value controller.Value) {
-	// 	p.Data.Slider9 = value
-	// })
-
 	for i := 0; i < 8; i++ {
 		i := i
-		// p.withLock(controller.Control(xl.ControlKnobSendA[i]), func(control controller.Control, value controller.Value) {
-		// 	p.Data.KnobsRow1[i] = value
-		// })
-		// p.withLock(controller.Control(xl.ControlKnobSendB[i]), func(control controller.Control, value controller.Value) {
-		// 	p.Data.KnobsRow2[i] = value
-		// })
-		// p.withLock(controller.Control(xl.ControlKnobPanDevice[i]), func(control controller.Control, value controller.Value) {
-		// 	p.Data.KnobsRow3[i] = value
-		// })
+		p.withLock(controller.Control(xl.ControlKnobSendA[i]), func(control controller.Control, value controller.Value) {
+			p.Data.KnobsRow1[i] = value
+		})
+		p.withLock(controller.Control(xl.ControlKnobSendB[i]), func(control controller.Control, value controller.Value) {
+			p.Data.KnobsRow2[i] = value
+		})
+		p.withLock(controller.Control(xl.ControlKnobPanDevice[i]), func(control controller.Control, value controller.Value) {
+			p.Data.KnobsRow3[i] = value
+		})
 		p.withLock(controller.Control(xl.ControlSlider[i]), func(control controller.Control, value controller.Value) {
 			p.Data.Sliders[i] = value
-			p.Data.KnobsRow1[i] = value
-			p.Data.KnobsRow2[i] = value
-			p.Data.KnobsRow3[i] = value
-
 		})
 		p.withLock(controller.Control(xl.ControlButtonTrackFocus[i]), func(control controller.Control, value controller.Value) {
 			if value == 0 {

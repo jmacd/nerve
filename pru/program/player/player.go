@@ -64,9 +64,9 @@ func New(inp controller.Input) *Player {
 
 	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
 
-	p.withLock(controller.Control(xl.ControlSlider[8]), func(control controller.Control, value controller.Value) {
-		p.Data.Slider9 = value
-	})
+	// p.withLock(controller.Control(xl.ControlSlider[8]), func(control controller.Control, value controller.Value) {
+	// 	p.Data.Slider9 = value
+	// })
 
 	for i := 0; i < 8; i++ {
 		i := i

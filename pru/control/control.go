@@ -24,11 +24,16 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
+	"os"
+	"time"
+
+	// Note: from when I borrowed Tracy's APC Mini controller
+	// xl "github.com/jmacd/nerve/pru/apc/mini"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/player"
 )
@@ -43,14 +48,7 @@ type (
 func Main() error {
 	var input *xl.LaunchControl
 
-	flag.Parse()
-
 	var err error
-	input, err = xl.Open()
-	if err != nil || input == nil {
-		return fmt.Errorf("error while opening connection to launchctl: %w", err)
-	}
-	defer input.Close()
 
 	buf := gpixio.NewBuffer()
 	state, err := newAppState(buf)
@@ -58,27 +56,63 @@ func Main() error {
 		return err
 	}
 
-	player := player.New(input)
+	recvFrom := os.Getenv("ARTNET_RECVFROM")
 
-	go func() {
-		err := input.Run(context.Background())
+	if recvFrom != "" {
+		recv, err := artnet.NewReceiver(recvFrom, buf.RGBA)
 		if err != nil {
-			log.Println("LX control run:", err)
+			return err
 		}
-		log.Println("LX control exit")
-	}()
-
-	go func() {
-		for {
-			player.Draw(buf.RGBA)
-
-			bank := state.waitReady()
-
-			buf.Copy0(1+2*player.Data.KnobsRow1[7].Float(), &state.frames[bank])
-
-			state.finish(bank)
+		ctx := context.Background()
+		if err = recv.Start(ctx); err != nil {
+			return err
 		}
-	}()
+
+		go func() {
+			for {
+				recv.Draw()
+
+				bank := state.waitReady()
+
+				const gamma = 2.2 // @@@ not sure lol
+
+				buf.Copy0(gamma, &state.frames[bank])
+
+				state.finish(bank)
+				// yawn
+				time.Sleep(time.Second / 30)
+			}
+		}()
+
+	} else {
+		input, err = xl.Open()
+		if err != nil || input == nil {
+			return fmt.Errorf("error while opening connection to launchctl: %w", err)
+		}
+		defer input.Close()
+
+		go func() {
+			err := input.Run(context.Background())
+			if err != nil {
+				log.Println("LX control run:", err)
+			}
+			log.Println("LX control exit")
+		}()
+
+		player := player.New(input)
+
+		go func() {
+			for {
+				player.Draw(buf.RGBA)
+
+				bank := state.waitReady()
+
+				buf.Copy0(1+2*player.Data.KnobsRow3[7].Float(), &state.frames[bank])
+
+				state.finish(bank)
+			}
+		}()
+	}
 
 	return state.run()
 }

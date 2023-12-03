@@ -2,7 +2,7 @@ package program
 
 import (
 	"github.com/jmacd/launchmidi/launchctl/xl"
-	"github.com/jmacd/nerve/artnet"
+	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/lucasb-eyer/go-colorful"
 )
 

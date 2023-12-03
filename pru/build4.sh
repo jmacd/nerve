@@ -1,7 +1,8 @@
 #!/bin/sh
 
-BONE=beaglebone.local
+#BONE=presskit.local
+BONE=nervekit.local
 
-scp -q -r -p * debian@${BONE}:pru
+scp -q -r -p * debian@${BONE}:nerve
 
-ssh -q debian@${BONE} '(cd pru && ./build3.sh)'
+ssh -q debian@${BONE} '(cd nerve && ./build3.sh)'

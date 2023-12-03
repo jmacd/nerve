@@ -3,20 +3,21 @@ package data
 import (
 	"math/rand"
 
-	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/launchmidi/midi/controller"
 )
 
 var rnd = rand.New(rand.NewSource(1333))
 
-func randValue() xl.Value {
-	return xl.Value(rnd.Intn(256))
+func randValue() controller.Value {
+	return controller.Value(rnd.Intn(256))
 }
 
 type Data struct {
-	Sliders       [8]xl.Value
-	KnobsRow1     [8]xl.Value
-	KnobsRow2     [8]xl.Value
-	KnobsRow3     [8]xl.Value
+	Sliders   [8]controller.Value
+	KnobsRow1 [8]controller.Value
+	KnobsRow2 [8]controller.Value
+	KnobsRow3 [8]controller.Value
+	//Slider9       controller.Value
 	ButtonsRadio  int // 0-7
 	ButtonsToggle [8]bool
 }

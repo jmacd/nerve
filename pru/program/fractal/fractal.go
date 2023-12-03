@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	colorful "github.com/lucasb-eyer/go-colorful"
 )
@@ -19,10 +19,10 @@ const (
 
 type locSet struct {
 	num int
-	za  xl.Value
-	zb  xl.Value
-	zc  xl.Value
-	zd  xl.Value
+	za  controller.Value
+	zb  controller.Value
+	zc  controller.Value
+	zd  controller.Value
 }
 
 type Fractal struct {
@@ -53,7 +53,7 @@ func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
 	f.render(data, img)
 }
 
-func vary(knob xl.Value) float64 {
+func vary(knob controller.Value) float64 {
 	return 1 // knob.Float() + 0.5
 }
 

@@ -29,8 +29,10 @@ import (
 	"os"
 	"time"
 
-	//"github.com/jmacd/launchmidi/launchctl/xl"
-	xl "github.com/jmacd/nerve/pru/apc/mini"
+	// Note: from when I borrowed Tracy's APC Mini controller
+	// xl "github.com/jmacd/nerve/pru/apc/mini"
+
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/player"

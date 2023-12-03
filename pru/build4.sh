@@ -1,8 +1,6 @@
 #!/bin/sh
 
-#BONE=beaglebone.local
 #BONE=presskit.local
-#BONE=192.168.6.2
 BONE=nervekit.local
 
 scp -q -r -p * debian@${BONE}:nerve

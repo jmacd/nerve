@@ -517,24 +517,24 @@ uint32_t wait_dma(uint32_t *restart) {
         } else if (ccerr & 1 << 16) {
           warn(CBITS_YELLOW);
         }
-        park(CBITS_GREEN);
+        warn(CBITS_GREEN);
       }
 
       if (EDMA_BASE[EDMA_EMR] != 0) {
         if ((EDMA_BASE[EDMA_EMR] & 0x1) != 0) {
           warn(CBITS_BLUE);
         }
-        park(CBITS_YELLOW);
+        warn(CBITS_YELLOW);
       }
 
       if (EDMA_BASE[EDMA_QEMR] != 0) {
         warn(CBITS_BLUE);
-        park(CBITS_BLUE);
+        warn(CBITS_BLUE);
       }
 
       if (EDMA_BASE[EDMA_EMRH] != 0) {
         warn(CBITS_BLUE);
-        park(CBITS_RED);
+        warn(CBITS_RED);
       }
 
       CT_INTC.SICR_bit.STS_CLR_IDX = SYSEVT_EDMA_CTRL_ERROR_TO_PRU;

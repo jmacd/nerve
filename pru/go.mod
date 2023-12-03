@@ -1,6 +1,8 @@
 module github.com/jmacd/nerve/pru
 
-go 1.19
+go 1.21
+
+toolchain go1.21.3
 
 require (
 	fyne.io/fyne v1.4.3
@@ -19,6 +21,7 @@ require (
 	github.com/godbus/dbus/v5 v5.0.3 // indirect
 	github.com/goki/freetype v0.0.0-20181231101311-fa8a33aabaff // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/jmacd/launchmidi v0.0.0-20231203073955-ae7df3ce652c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect

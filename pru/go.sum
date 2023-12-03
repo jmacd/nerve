@@ -24,6 +24,10 @@ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGw
 github.com/jackmordaunt/icns v0.0.0-20181231085925-4f16af745526/go.mod h1:UQkeMHVoNcyXYq9otUupF7/h/2tmHlhrS2zw7ZVvUqc=
 github.com/jmacd/go-artnet v0.0.0-20220707060336-6bfd9f54a67f h1:rpu3X3efNJtsSeKlu3Tw4MAKHEV/tdZCuM6U52Rt6Tw=
 github.com/jmacd/go-artnet v0.0.0-20220707060336-6bfd9f54a67f/go.mod h1:V35dLMmckSVOsMx/xs7yM7adR6krRBbCnRI8R8GoPpA=
+github.com/jmacd/launchmidi v0.0.0-20221203062954-9a79ac9cf609 h1:B3NHuko5tFU1oQ3/e+3PDwzkdH3+uIM4hfjaX+L1Fdg=
+github.com/jmacd/launchmidi v0.0.0-20221203062954-9a79ac9cf609/go.mod h1:Nridt1mtJVkWR+heeyNsxnxL3wWWExE+iwruw2wgsZA=
+github.com/jmacd/launchmidi v0.0.0-20231203073955-ae7df3ce652c h1:YxjCBUKpb16uMKeLm7g3APDk7LgXpEBHBvbWiJWiLBw=
+github.com/jmacd/launchmidi v0.0.0-20231203073955-ae7df3ce652c/go.mod h1:xtva9HtzZtN1vym7Ovn6GnM8yNu+dRoMv4He3uh7Km4=
 github.com/josephspurrier/goversioninfo v0.0.0-20200309025242-14b0ab84c6ca/go.mod h1:eJTEwMjXb7kZ633hO3Ln9mBUCOjX2+FlTljvpl9SYdE=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=

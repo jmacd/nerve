@@ -11,13 +11,27 @@ import (
 	"github.com/jmacd/nerve/pru/program/data"
 )
 
+var text = `this is open mic nite; welcome. glad you came, we have lots to do.
+I think it would be nice if we could have a gathering of makers too.
+`
+
 type OpenMic struct {
+	*gg.Context
 	lock sync.Mutex
 	text string
 }
 
 func New() *OpenMic {
-	o := &OpenMic{}
+	o := &OpenMic{
+		Context: gg.NewContext(128, 128),
+		text:    text,
+	}
+	ft, err := data.LoadFontFace("resource/futura.ttf", 11)
+	if err != nil {
+		panic(err)
+	}
+
+	o.Context.SetFontFace(ft)
 	go o.read()
 	return o
 }
@@ -47,22 +61,21 @@ func (o *OpenMic) set(t string) {
 }
 
 func (o *OpenMic) Draw(data *data.Data, img *image.RGBA) {
-	ggctx := gg.NewContextForRGBA(img)
+	o.Context.DrawRectangle(0, 0, 128, 128)
+	o.Context.SetRGB(data.Sliders[0].Float(), data.Sliders[1].Float(), data.Sliders[2].Float())
+	o.Context.Fill()
 
-	ggctx.DrawRectangle(0, 0, 64, 64)
-	ggctx.SetRGB(data.Sliders[0].Float(), data.Sliders[1].Float(), data.Sliders[2].Float())
-	ggctx.Fill()
+	o.Context.SetRGB(data.Sliders[3].Float(), data.Sliders[4].Float(), data.Sliders[5].Float())
 
-	ggctx.SetRGB(data.Sliders[3].Float(), data.Sliders[4].Float(), data.Sliders[5].Float())
-
-	// if err := ggctx.LoadFontFace("/Library/Fonts/Arial.ttf", 12); err != nil {
-	// 	panic(err)
-	// }
-	ggctx.DrawStringWrapped(o.get(), 3, 3, 0, 0, 56, 1.2, gg.AlignLeft)
+	o.Context.DrawStringWrapped(o.get(), 3, 3, 0, 0, 61, 1.1, gg.AlignLeft)
 
 	// for i := 0; i < 8; i++ {
 	// 	x := (i/4)*64 + 32
 	// 	y := (i%4)*32 + 16
-	// 	ggctx.DrawString(fmt.Sprint(i+1), float64(x), float64(y))
+	// 	o.Context.DrawString(fmt.Sprint(i+1), float64(x), float64(y))
 	// }
+
+	it := o.Context.Image().(*image.RGBA)
+	it.Pix, img.Pix = img.Pix, it.Pix
+
 }

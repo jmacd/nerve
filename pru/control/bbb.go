@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -89,7 +90,7 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 }
 
 func (state *appState) finish(bank uint32) {
-	state.ctrl.readyBank = bank
+	atomic.StoreUint32(&state.ctrl.readyBank, bank)
 }
 
 func (state *appState) run() error {
@@ -97,9 +98,11 @@ func (state *appState) run() error {
 }
 
 func (state *appState) waitReady() uint32 {
-	for state.ctrl.readyBank != state.ctrl.startBank {
+	ready := atomic.LoadUint32(&state.ctrl.readyBank)
+	for ready != atomic.LoadUint32(&state.ctrl.startBank) {
+		runtime.Gosched()
 	}
-	return state.ctrl.readyBank ^ 1
+	return ready ^ 1
 }
 
 func openRPMsgDevice() (*RPMsgDevice, error) {

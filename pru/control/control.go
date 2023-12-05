@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	// Note: from when I borrowed Tracy's APC Mini controller
 	// xl "github.com/jmacd/nerve/pru/apc/mini"
@@ -74,13 +73,13 @@ func Main() error {
 
 				bank := state.waitReady()
 
-				const gamma = 2.2 // @@@ not sure lol
-
+				const gamma = 2.2
 				buf.Copy0(gamma, &state.frames[bank])
 
 				state.finish(bank)
-				// yawn
-				time.Sleep(time.Second / 30)
+
+				// Let the UDP receiver do some work.
+				//time.Sleep(time.Second / 30)
 			}
 		}()
 

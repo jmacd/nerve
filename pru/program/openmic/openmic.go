@@ -5,15 +5,20 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"strings"
 	"sync"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/fogleman/gg"
 	"github.com/jmacd/nerve/pru/program/data"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
-var text = `this is open mic nite; welcome. glad you came, we have lots to do.
-I think it would be nice if we could have a gathering of makers too.
-`
+var startText = `this is open mic nite; welcome. glad you came, we
+have lots to do.  I think it would be nice if we could have a
+gathering of makers too.  `
 
 type OpenMic struct {
 	*gg.Context
@@ -21,19 +26,62 @@ type OpenMic struct {
 	text string
 }
 
+var (
+	arrival = distuv.LogNormal{
+		Mu:    0.15,
+		Sigma: 0.6,
+	}
+	space = distuv.LogNormal{
+		Mu:    0,
+		Sigma: 0.4,
+	}
+	punct = distuv.LogNormal{
+		Mu:    0.1,
+		Sigma: 0.2,
+	}
+)
+
 func New() *OpenMic {
 	o := &OpenMic{
 		Context: gg.NewContext(128, 128),
-		text:    text,
+		text:    "",
 	}
-	ft, err := data.LoadFontFace("resource/futura.ttf", 11)
+	ft, err := data.LoadFontFace("resource/futura.ttf", 12)
 	if err != nil {
 		panic(err)
 	}
 
 	o.Context.SetFontFace(ft)
 	go o.read()
+	go o.write()
 	return o
+}
+
+func (o *OpenMic) write() {
+	for {
+		var txt = startText
+		o.clear()
+		time.Sleep(time.Second)
+
+		for txt != "" {
+			r, size := utf8.DecodeRuneInString(txt)
+			o.stroke(r)
+			txt = txt[size:]
+
+			rnd := 0.0
+			if unicode.IsSpace(r) {
+				rnd = arrival.Rand()
+			} else if unicode.IsPunct(r) {
+				rnd = punct.Rand()
+			} else {
+				rnd = space.Rand()
+			}
+
+			ii := time.Duration(rnd * float64(time.Millisecond) * 200)
+
+			time.Sleep(ii)
+		}
+	}
 }
 
 func (o *OpenMic) read() {
@@ -46,6 +94,22 @@ func (o *OpenMic) read() {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
 	}
+}
+
+func (o *OpenMic) clear() {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.text = ""
+}
+
+func (o *OpenMic) stroke(ch rune) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	var b strings.Builder
+	b.WriteString(o.text)
+	b.WriteRune(ch)
+
+	o.text = b.String()
 }
 
 func (o *OpenMic) get() string {
@@ -67,7 +131,7 @@ func (o *OpenMic) Draw(data *data.Data, img *image.RGBA) {
 
 	o.Context.SetRGB(data.Sliders[3].Float(), data.Sliders[4].Float(), data.Sliders[5].Float())
 
-	o.Context.DrawStringWrapped(o.get(), 3, 3, 0, 0, 61, 1.1, gg.AlignLeft)
+	o.Context.DrawStringWrapped(o.get(), 4, 4, 0, 0, 60, 1.1, gg.AlignLeft)
 
 	// for i := 0; i < 8; i++ {
 	// 	x := (i/4)*64 + 32

@@ -73,6 +73,7 @@ func (state *appState) finish(bank uint32) {
 
 	if state.sender != nil {
 		state.sender.Send(state.buf.RGBA)
+		//fmt.Println("Sent")
 	}
 
 	canvas.Refresh(state.inputImage)

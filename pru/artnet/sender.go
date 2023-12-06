@@ -11,10 +11,6 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 )
 
-const (
-	maxPerPacket = 170
-)
-
 type (
 	Sender struct {
 		destStr string
@@ -83,6 +79,11 @@ func (s *Sender) send(buffer *image.RGBA) error {
 		s.ArtDMXPacket.Length = uint16(num * 3)
 
 		b, _ := s.ArtDMXPacket.MarshalBinary()
+
+		//fmt.Println("Pkt", len(b), "w", num)
+		if len(b) > maxPacketSize {
+			panic(fmt.Sprint("wrong size", len(b)))
+		}
 
 		_, err := s.conn.WriteTo(b, s.dest)
 		if err != nil {

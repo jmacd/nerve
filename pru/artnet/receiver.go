@@ -11,6 +11,12 @@ import (
 	"github.com/jmacd/go-artnet/packet/code"
 )
 
+const (
+	receiverQueueLen = 1000
+	maxPacketSize    = 1024
+	maxPerPacket     = 170
+)
+
 type Receiver struct {
 	conn *net.UDPConn
 	out  *image.RGBA
@@ -40,12 +46,12 @@ func NewReceiver(hostIP string, out *image.RGBA) (*Receiver, error) {
 }
 
 func (r *Receiver) Start(ctx context.Context) error {
-	recvCh := make(chan []byte, 1000)
+	recvCh := make(chan []byte, receiverQueueLen)
 	r.wg.Add(2)
 
 	go func() {
 		defer r.wg.Done()
-		buf := make([]byte, 1024)
+		buf := make([]byte, maxPacketSize)
 		for {
 			n, _, err := r.conn.ReadFromUDP(buf) // first packet you read will be your own
 			if err != nil {
@@ -63,7 +69,7 @@ func (r *Receiver) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case recvCh <- buf[:n]:
-				buf = make([]byte, 1024)
+				buf = make([]byte, maxPacketSize)
 			}
 		}
 	}()
@@ -86,18 +92,19 @@ func (r *Receiver) Start(ctx context.Context) error {
 					off := uint64(0)
 					switch dmx.SubUni {
 					case 0:
+						//fmt.Println("At zero", r.lsu)
 						off = 0
 						r.lsu = 0
 						r.off = 0
 					case r.lsu + 1:
 						off = r.off
 						r.lsu++
+						//fmt.Println("LSU++", r.lsu)
 					default:
 						fmt.Println("artnet: dmx reset", dmx.SubUni, dmx.Length, r.off, r.lsu)
 						off = 0
 						r.off = 0
 						r.lsu = dmx.SubUni
-
 					}
 
 					for i := uint64(0); i*3+2 < uint64(dmx.Length); i++ {
@@ -114,6 +121,9 @@ func (r *Receiver) Start(ctx context.Context) error {
 
 					if int(r.off*4) == len(r.in.Pix) {
 						copy(r.cpy.Pix, r.in.Pix)
+						//fmt.Println("FRAME", r.lsu)
+					} else {
+						//fmt.Println("NOTDONE", r.off*4, len(r.in.Pix))
 					}
 				default:
 					fmt.Printf("artnet: %v %#v\n", p.GetOpCode(), p)

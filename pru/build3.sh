@@ -64,4 +64,7 @@ export CGO_CFLAGS="-I/home/debian/bbb/include -mfpu=neon"
 export CGO_CXXFLAGS="-I/home/debian/bbb/include"
 ${GO} build -ldflags="-extldflags=-static"  -o ledctrl ./control
 
+# Note! Do this
+# sudo sysctl -w net.core.rmem_default=1966080
+
 # Note control has to run with super privileges

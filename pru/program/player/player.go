@@ -22,7 +22,6 @@ type Player struct {
 	inp  controller.Input
 	lock sync.Mutex
 
-	playing  int
 	programs [16]Program
 
 	data.Data
@@ -63,6 +62,7 @@ func New(inp controller.Input) *Player {
 	p.programs[7] = panelnum.New()
 
 	p.Data.Init()
+	p.Data.ButtonsRadio = 2 // HACKY! @@@ TODO
 
 	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
 

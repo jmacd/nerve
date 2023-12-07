@@ -24,14 +24,17 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	// Note: from when I borrowed Tracy's APC Mini controller
 	// xl "github.com/jmacd/nerve/pru/apc/mini"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/artnet"
 	"github.com/jmacd/nerve/pru/gpixio"
 	"github.com/jmacd/nerve/pru/program/player"
@@ -44,8 +47,12 @@ type (
 	DoublePixel = gpixio.DoublePixel
 )
 
+var (
+	haveControl = flag.Bool("control", true, "have a midi controller")
+)
+
 func Main() error {
-	var input *xl.LaunchControl
+	flag.Parse()
 
 	var err error
 
@@ -79,24 +86,32 @@ func Main() error {
 				state.finish(bank)
 
 				// Let the UDP receiver do some work.
-				//time.Sleep(time.Second / 30)
+				time.Sleep(time.Second / 30)
 			}
 		}()
 
 	} else {
-		input, err = xl.Open()
-		if err != nil || input == nil {
-			return fmt.Errorf("error while opening connection to launchctl: %w", err)
-		}
-		defer input.Close()
+		var input controller.Input // *xl.LaunchControl
 
-		go func() {
-			err := input.Run(context.Background())
-			if err != nil {
-				log.Println("LX control run:", err)
+		if !*haveControl {
+			input = noInput{}
+		} else {
+			lx, err := xl.Open()
+			if err != nil || input == nil {
+				return fmt.Errorf("error while opening connection to launchctl: %w", err)
 			}
-			log.Println("LX control exit")
-		}()
+			defer lx.Close()
+
+			input = lx
+
+			go func() {
+				err := lx.Run(context.Background())
+				if err != nil {
+					log.Println("LX control run:", err)
+				}
+				log.Println("LX control exit")
+			}()
+		}
 
 		player := player.New(input)
 
@@ -114,6 +129,20 @@ func Main() error {
 	}
 
 	return state.run()
+}
+
+type noInput struct{}
+
+var _ controller.Input = noInput{}
+
+func (noInput) AddCallback(ch int, con controller.Control, cb controller.Callback) {
+}
+
+func (noInput) SetColor(ch int, con controller.Control, c controller.Color) {
+}
+
+func (noInput) AllChannels() int {
+	return 16
 }
 
 func main() {

@@ -1,0 +1,12 @@
+[Unit]
+Description=Nerve flashy LEDs
+After=multi-user.target
+
+[Service]
+Type=simple
+Restart=always
+WorkingDirectory=/home/debian
+ExecStart=/bin/bash -c '/home/debian/start_nerve.sh'
+
+[Install]
+WantedBy=multi-user.target

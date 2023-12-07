@@ -16,11 +16,10 @@ func randValue() controller.Value {
 }
 
 type Data struct {
-	Sliders   [8]controller.Value
-	KnobsRow1 [8]controller.Value
-	KnobsRow2 [8]controller.Value
-	KnobsRow3 [8]controller.Value
-	//Slider9       controller.Value
+	Sliders       [8]controller.Value
+	KnobsRow1     [8]controller.Value
+	KnobsRow2     [8]controller.Value
+	KnobsRow3     [8]controller.Value
 	ButtonsRadio  int // 0-7
 	ButtonsToggle [8]bool
 }

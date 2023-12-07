@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"image"
+	"io/fs"
 	"os"
 	"strings"
 	"sync"
@@ -13,12 +14,19 @@ import (
 
 	"github.com/fogleman/gg"
 	"github.com/jmacd/nerve/pru/program/data"
+	"golang.org/x/image/font"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
+const lineSpacing = 1.15
+const lineSpacingVar = 0.25
+const displayHeight = 60
 const displayWidth = 60
 const displayMargin = 2
 const displayTotal = displayWidth + 2*displayMargin
+const fontMin = 6.0
+const fontMax = 24.0
+const fontSize = 12.0
 
 var startText = `this is open mic nite; welcome. glad you came, we
 have lots to do.  I think it would be nice if we could have a
@@ -29,6 +37,11 @@ type OpenMic struct {
 	lock    sync.Mutex
 	display []string
 	input   string
+	fonts   []font.Face
+	fnames  []string
+	fnum    int
+	fsize   float64
+	lspace  float64
 	combine bool
 }
 
@@ -50,18 +63,41 @@ var (
 func New() *OpenMic {
 	o := &OpenMic{
 		Context: gg.NewContext(128, 128),
+		input:   startText,
+		fsize:   fontSize,
+		lspace:  lineSpacing,
 	}
-	ft, err := data.LoadFontFace("resource/futura.ttf", 12)
+	files, err := fs.Glob(data.ResourceFS, "resource/*.ttf")
 	if err != nil {
 		panic(err)
 	}
 
-	o.Context.SetFontFace(ft)
-	o.input = startText
+	for _, file := range files {
+		ft, err := data.LoadFontFace(file, o.fsize)
+		if err != nil {
+			fmt.Printf("skipping font %q: %v\n", file, err)
+			continue
+		}
+		o.fonts = append(o.fonts, ft)
+		o.fnames = append(o.fnames, file)
+	}
+
+	if len(o.fonts) == 0 {
+		panic("no fonts were loaded!")
+	}
 
 	go o.read()
 	go o.write()
 	return o
+}
+
+func (o *OpenMic) wrapInput() []string {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.Context.SetFontFace(o.fonts[o.fnum])
+
+	return o.Context.WordWrap(o.input, displayWidth)
 }
 
 func (o *OpenMic) write() {
@@ -69,7 +105,7 @@ func (o *OpenMic) write() {
 		o.clear()
 		time.Sleep(time.Second)
 
-		txt := o.Context.WordWrap(o.input, displayWidth)
+		txt := o.wrapInput()
 
 		for len(txt) != 0 {
 			line := txt[0]
@@ -93,7 +129,7 @@ func (o *OpenMic) write() {
 				rnd = space.Rand()
 			}
 
-			ii := time.Duration(rnd * float64(time.Millisecond) * 50)
+			ii := time.Duration(rnd * float64(time.Millisecond) * 400)
 
 			time.Sleep(ii)
 		}
@@ -123,6 +159,8 @@ func (o *OpenMic) stroke(ch rune, end bool) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
+	o.Context.SetFontFace(o.fonts[o.fnum])
+
 	var b strings.Builder
 	b.WriteString(o.display[len(o.display)-1])
 	b.WriteRune(ch)
@@ -134,7 +172,16 @@ func (o *OpenMic) stroke(ch rune, end bool) {
 
 	o.combine = false
 	if len(o.display) > 1 {
-		w, _ := o.Context.MeasureString(o.display[len(o.display)-2] + " " + o.display[len(o.display)-1])
+
+		w := func() (rv float64) {
+			// See https://github.com/golang/freetype/issues/87
+			if ret := recover(); ret != nil {
+				rv = displayWidth
+				return
+			}
+			w, _ := o.Context.MeasureString(o.display[len(o.display)-2] + " " + o.display[len(o.display)-1])
+			return w
+		}()
 		if w <= displayWidth {
 			o.combine = true
 		}
@@ -144,15 +191,13 @@ func (o *OpenMic) stroke(ch rune, end bool) {
 	if o.combine {
 		lc--
 	}
-	if lc*o.Context.FontHeight() > displayTotal {
+	if lc*o.lspace*o.Context.FontHeight() > displayHeight {
 		copy(o.display[0:len(o.display)-1], o.display[1:])
 		o.display = o.display[0 : len(o.display)-1]
 	}
 }
 
-func (o *OpenMic) get() ([]string, bool) {
-	o.lock.Lock()
-	defer o.lock.Unlock()
+func (o *OpenMic) getLocked() ([]string, bool) {
 	return o.display, o.combine
 }
 
@@ -164,15 +209,40 @@ func (o *OpenMic) set(t string) {
 	o.combine = false
 }
 
-func (o *OpenMic) Draw(data *data.Data, img *image.RGBA) {
+func (o *OpenMic) Draw(dat *data.Data, img *image.RGBA) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
 	o.Context.DrawRectangle(0, 0, 128, 128)
-	o.Context.SetRGB(data.Sliders[0].Float(), data.Sliders[1].Float(), data.Sliders[2].Float())
+	o.Context.SetRGB(dat.Sliders[0].Float(), dat.Sliders[1].Float(), dat.Sliders[2].Float())
 	o.Context.Fill()
 
-	o.Context.SetRGB(data.Sliders[3].Float(), data.Sliders[4].Float(), data.Sliders[5].Float())
+	o.Context.SetRGB(dat.Sliders[3].Float(), dat.Sliders[4].Float(), dat.Sliders[5].Float())
 
-	const lineSpacing = 1.15
-	lines, combine := o.get()
+	nfsize := 0.0
+	nfval := dat.KnobsRow1[6].Float() - 0.5
+	if nfval < 0 {
+		nfsize = fontSize + (fontSize-fontMin)*nfval
+	} else {
+		nfsize = fontSize + (fontMax-fontSize)*nfval
+	}
+
+	if nfsize != o.fsize {
+		o.fsize = nfsize
+		o.fonts = nil
+		for _, file := range o.fnames {
+			ft, _ := data.LoadFontFace(file, o.fsize)
+			if ft != nil {
+				o.fonts = append(o.fonts, ft)
+			}
+		}
+	}
+
+	o.fnum = int(dat.KnobsRow1[7]) % len(o.fonts)
+	o.lspace = lineSpacing + lineSpacingVar*(dat.KnobsRow1[5].Float()-0.5)
+	o.Context.SetFontFace(o.fonts[o.fnum])
+
+	lines, combine := o.getLocked()
 	lc := len(lines)
 	var l1, l2 string
 	if combine {
@@ -181,10 +251,10 @@ func (o *OpenMic) Draw(data *data.Data, img *image.RGBA) {
 		lines = lines[:lc-2]
 	}
 	for idx, line := range lines {
-		o.Context.DrawStringAnchored(line, displayMargin, float64(idx+1)*o.Context.FontHeight()*lineSpacing, 0, 0)
+		o.Context.DrawStringAnchored(line, displayMargin, float64(idx+1)*o.Context.FontHeight()*o.lspace, 0, 0)
 	}
 	if combine {
-		o.Context.DrawStringAnchored(l2+" "+l1, displayMargin, float64(lc-1)*o.Context.FontHeight()*lineSpacing, 0, 0)
+		o.Context.DrawStringAnchored(l2+" "+l1, displayMargin, float64(lc-1)*o.Context.FontHeight()*o.lspace, 0, 0)
 	}
 
 	it := o.Context.Image().(*image.RGBA)

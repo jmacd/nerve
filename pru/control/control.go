@@ -97,7 +97,7 @@ func Main() error {
 			input = noInput{}
 		} else {
 			lx, err := xl.Open()
-			if err != nil || input == nil {
+			if err != nil || lx == nil {
 				return fmt.Errorf("error while opening connection to launchctl: %w", err)
 			}
 			defer lx.Close()

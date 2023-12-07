@@ -9,6 +9,7 @@ import (
 	"github.com/jmacd/nerve/pru/program/circle"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/jmacd/nerve/pru/program/fractal"
+	"github.com/jmacd/nerve/pru/program/gradient"
 	"github.com/jmacd/nerve/pru/program/openmic"
 	"github.com/jmacd/nerve/pru/program/panelnum"
 	"github.com/jmacd/nerve/pru/program/panes"
@@ -58,6 +59,9 @@ func New(inp controller.Input) *Player {
 	p.programs[0] = fractal.New()
 	p.programs[1] = panes.New()
 	p.programs[2] = openmic.New()
+	p.programs[3] = fractal.New()
+	p.programs[4] = gradient.New()
+	p.programs[5] = openmic.New()
 	p.programs[6] = circle.New()
 	p.programs[7] = panelnum.New()
 

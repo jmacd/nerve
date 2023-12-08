@@ -11,7 +11,6 @@ import (
 	"github.com/jmacd/nerve/pru/program/fractal"
 	"github.com/jmacd/nerve/pru/program/gradient"
 	"github.com/jmacd/nerve/pru/program/openmic"
-	"github.com/jmacd/nerve/pru/program/panelnum"
 	"github.com/jmacd/nerve/pru/program/panes"
 )
 
@@ -56,17 +55,16 @@ func New(inp controller.Input) *Player {
 		p.programs[i] = newEmptyProgram()
 	}
 
-	p.programs[0] = fractal.New()
-	p.programs[1] = panes.New()
-	p.programs[2] = openmic.New()
-	p.programs[3] = fractal.New()
-	p.programs[4] = gradient.New()
-	p.programs[5] = openmic.New()
+	p.programs[0] = openmic.New(data.WelcomeText, false)
+	p.programs[1] = fractal.New()
+	p.programs[2] = panes.New()
+	p.programs[3] = openmic.New(data.Manifesto, false)
+	p.programs[4] = openmic.New(data.Technical, false)
+	p.programs[5] = gradient.New()
 	p.programs[6] = circle.New()
-	p.programs[7] = panelnum.New()
+	p.programs[7] = openmic.New("", true)
 
 	p.Data.Init()
-	p.Data.ButtonsRadio = 2 // HACKY! @@@ TODO
 
 	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
 

@@ -28,10 +28,6 @@ const fontMin = 6.0
 const fontMax = 24.0
 const fontSize = 12.0
 
-var startText = `this is open mic nite; welcome. glad you came, we
-have lots to do.  I think it would be nice if we could have a
-gathering of makers too.  `
-
 type OpenMic struct {
 	*gg.Context
 	lock    sync.Mutex
@@ -39,6 +35,7 @@ type OpenMic struct {
 	input   string
 	fonts   []font.Face
 	fnames  []string
+	rate    float64
 	fnum    int
 	fsize   float64
 	lspace  float64
@@ -60,12 +57,13 @@ var (
 	}
 )
 
-func New() *OpenMic {
+func New(startText string, reader bool) *OpenMic {
 	o := &OpenMic{
 		Context: gg.NewContext(128, 128),
 		input:   startText,
 		fsize:   fontSize,
 		lspace:  lineSpacing,
+		rate:    0.5,
 	}
 	files, err := fs.Glob(data.ResourceFS, "resource/*.ttf")
 	if err != nil {
@@ -86,7 +84,9 @@ func New() *OpenMic {
 		panic("no fonts were loaded!")
 	}
 
-	go o.read()
+	if reader {
+		go o.read()
+	}
 	go o.write()
 	return o
 }
@@ -129,7 +129,7 @@ func (o *OpenMic) write() {
 				rnd = space.Rand()
 			}
 
-			ii := time.Duration(rnd * float64(time.Millisecond) * 400)
+			ii := time.Duration(rnd * float64(time.Millisecond) * 200 * (1.5 - o.speed()))
 
 			time.Sleep(ii)
 		}
@@ -155,6 +155,10 @@ func (o *OpenMic) clear() {
 	o.combine = false
 }
 
+func (o *OpenMic) speed() float64 {
+	return o.rate
+}
+
 func (o *OpenMic) stroke(ch rune, end bool) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
@@ -176,6 +180,7 @@ func (o *OpenMic) stroke(ch rune, end bool) {
 		w := func() (rv float64) {
 			// See https://github.com/golang/freetype/issues/87
 			if ret := recover(); ret != nil {
+				fmt.Printf("Could not measure %q %q\n", o.display[len(o.display)-2], o.display[len(o.display)-1])
 				rv = displayWidth
 				return
 			}
@@ -202,7 +207,6 @@ func (o *OpenMic) getLocked() ([]string, bool) {
 }
 
 func (o *OpenMic) set(t string) {
-	fmt.Println("SET:", t)
 	o.lock.Lock()
 	defer o.lock.Unlock()
 	o.input = t
@@ -238,6 +242,7 @@ func (o *OpenMic) Draw(dat *data.Data, img *image.RGBA) {
 		}
 	}
 
+	o.rate = dat.KnobsRow1[4].Float()
 	o.fnum = int(dat.KnobsRow1[7]) % len(o.fonts)
 	o.lspace = lineSpacing + lineSpacingVar*(dat.KnobsRow1[5].Float()-0.5)
 	o.Context.SetFontFace(o.fonts[o.fnum])

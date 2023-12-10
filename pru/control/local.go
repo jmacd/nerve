@@ -19,11 +19,11 @@ type appState struct {
 	buf    *gpixio.Buffer
 	sender *artnet.Sender
 
-	inputWindow  fyne.Window
-	outputWindow fyne.Window
+	inputWindow fyne.Window
+	// outputWindow fyne.Window
 
-	inputImage  *canvas.Image
-	outputImage *canvas.Image
+	inputImage *canvas.Image
+	// outputImage *canvas.Image
 
 	outputPixels *image.RGBA
 
@@ -47,21 +47,21 @@ func newAppState(buf *gpixio.Buffer) (*appState, error) {
 	inputWindow.SetContent(inputImage)
 	inputWindow.Resize(fyne.Size{Width: 768, Height: 768})
 
-	outputWindow := app.NewWindow("Visage")
-	outputImage := canvas.NewImageFromImage(outputPixels)
-	outputImage.FillMode = canvas.ImageFillOriginal
-	outputWindow.SetContent(outputImage)
-	outputWindow.Resize(fyne.Size{Width: 256, Height: 256})
+	// outputWindow := app.NewWindow("Visage")
+	// outputImage := canvas.NewImageFromImage(outputPixels)
+	// outputImage.FillMode = canvas.ImageFillOriginal
+	// outputWindow.SetContent(outputImage)
+	// outputWindow.Resize(fyne.Size{Width: 256, Height: 256})
 
 	return &appState{
-		frames:       &Frameset{},
-		inputWindow:  inputWindow,
-		outputWindow: outputWindow,
-		buf:          buf,
-		sender:       sender,
+		frames:      &Frameset{},
+		inputWindow: inputWindow,
+		// outputWindow: outputWindow,
+		buf:    buf,
+		sender: sender,
 
-		inputImage:   inputImage,
-		outputImage:  outputImage,
+		inputImage: inputImage,
+		// outputImage:  outputImage,
 		outputPixels: outputPixels,
 	}, nil
 }
@@ -73,17 +73,18 @@ func (state *appState) finish(bank uint32) {
 
 	if state.sender != nil {
 		state.sender.Send(state.buf.RGBA)
+		//fmt.Println("Sent")
 	}
 
 	canvas.Refresh(state.inputImage)
-	canvas.Refresh(state.outputImage)
+	// canvas.Refresh(state.outputImage)
 
 	// TODO: Avoids flicker. @@@
 	time.Sleep(time.Millisecond * 200)
 }
 
 func (state *appState) run() error {
-	state.outputWindow.Show()
+	// state.outputWindow.Show()
 	state.inputWindow.ShowAndRun()
 	return nil
 }

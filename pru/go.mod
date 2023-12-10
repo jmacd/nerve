@@ -26,9 +26,11 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
 	github.com/srwiley/rasterx v0.0.0-20200120212402-85cb7272f5e9 // indirect
 	github.com/stretchr/testify v1.5.1 // indirect
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/image v0.6.0 // indirect
 	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
+	gonum.org/v1/gonum v0.14.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )

@@ -89,16 +89,16 @@ The panels feature simple red, green, and blue LEDs, one of each color
 per pixel.  By modulating pins of the HUB75 connector, an application
 can set each pixel off or on at full brightness.  The panel uses what
 is called a "1/16 scan" design, meaning at any moment in time, only
-one out of 16 pixels is actually on.  The appearance of brightness and
+one out of 16 pixels can be on.  The appearance of brightness and
 color control is because our eyes are slow and the PRU is fast.
 
 The am3358 organizes its general purpose output pins in four 32-bit
 "banks", meaning it can modulate all pins by writing only four 32-bit
 "words" to four special addresses.
 
-Each 32x64 panel is organized as a 16 pairs of 64-long scan lines
+Each 32x64 panel is organized as 16 pairs of 64-long scan lines
 a.k.a. "shift registers".  There are four address lines to select the
-current scan line, CLOCK, LATCH, ENABLE pins, and six pins
+current scan line pair, CLOCK, LATCH, ENABLE pins, and six pins
 corresponding with the pair of red, green, and blue pixels.
 
 The hardware or software is meant to rapidly cycle through each of the
@@ -107,7 +107,7 @@ Imagine there are eight panels, not two.  It takes four 32-bit words
 to encode a pair of pixel values for all panels, or 16 bytes.  It
 takes 64 of those to complete a single scan line, or 1024 bytes.  It
 takes 16 of those to complete a whole frame, which is 16 kilobytes.
-But with only 6144 of information per frame, the frame has 37.5%
+But with only 6144 bytes of information per frame, the frame has 37.5%
 information density.
 
 To generate colors other than red, green, and blue, the program has to

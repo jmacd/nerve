@@ -39,6 +39,10 @@ func New() *Fractal {
 	}
 }
 
+func (f *Fractal) Inputs() []controller.Control {
+	return data.StandardControls
+}
+
 func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
 	loc := locSet{
 		num: int(data.KnobsRow1[0]),

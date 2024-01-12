@@ -33,7 +33,7 @@ func (d *Data) Init() {
 		d.KnobsRow1[i] = randValue()
 		d.KnobsRow2[i] = randValue()
 		d.KnobsRow3[i] = randValue()
-		d.ButtonsToggle[i] = rnd.Intn(2) == 0
+		d.ButtonsToggle[i] = false
 		d.ButtonsToggleMod4[i] = rnd.Intn(4)
 	}
 }
@@ -54,4 +54,9 @@ func LoadFontFace(path string, points float64) (font.Face, error) {
 		Size: points,
 	})
 	return face, nil
+}
+
+var StandardControls = []controller.Control{
+	// doesn't seem to work though
+	// xl.ControlKnobPanDevice[7],
 }

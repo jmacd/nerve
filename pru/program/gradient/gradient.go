@@ -3,6 +3,7 @@ package gradient
 import (
 	"image"
 
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -12,6 +13,10 @@ type Gradient struct {
 
 func New() *Gradient {
 	return &Gradient{}
+}
+
+func (c *Gradient) Inputs() []controller.Control {
+	return data.StandardControls
 }
 
 func (c *Gradient) Draw(data *data.Data, img *image.RGBA) {

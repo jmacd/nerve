@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/fogleman/gg"
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 )
 
@@ -12,6 +13,10 @@ type Circle struct {
 
 func New() *Circle {
 	return &Circle{}
+}
+
+func (c *Circle) Inputs() []controller.Control {
+	return data.StandardControls
 }
 
 func (c *Circle) Draw(data *data.Data, img *image.RGBA) {

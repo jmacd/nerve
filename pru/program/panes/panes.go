@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/fogleman/gg"
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/lucasb-eyer/go-colorful"
 )
@@ -13,6 +14,10 @@ type Panes struct {
 
 func New() *Panes {
 	return &Panes{}
+}
+
+func (p *Panes) Inputs() []controller.Control {
+	return data.StandardControls
 }
 
 func (c *Panes) setColor(ggctx *gg.Context, data *data.Data, x, y, z float64) {

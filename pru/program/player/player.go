@@ -19,6 +19,7 @@ const fastPressLimit = 500 * time.Millisecond
 
 type Program interface {
 	Draw(*data.Data, *image.RGBA)
+	Inputs() []controller.Control
 }
 
 type Player struct {
@@ -31,6 +32,7 @@ type Player struct {
 	current   data.Data
 	shadows   [8]data.Data
 	lastpress time.Time
+	active    map[controller.Control]bool
 }
 
 func (p *Player) withLock(trigger controller.Control, callback func(control controller.Control, value controller.Value)) {
@@ -52,12 +54,15 @@ func newEmptyProgram() Program {
 func (e *emptyProgram) Draw(*data.Data, *image.RGBA) {
 }
 
+func (e *emptyProgram) Inputs() []controller.Control {
+	return nil
+}
+
 func New(inp controller.Input) *Player {
 	p := &Player{
 		inp: inp,
 	}
 
-	p.current.Init()
 	for i := range p.programs {
 		p.programs[i] = newEmptyProgram()
 		p.shadows[i].Init()
@@ -72,7 +77,8 @@ func New(inp controller.Input) *Player {
 	p.programs[6] = circle.New()
 	p.programs[7] = openmic.New("", true)
 
-	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
+	p.pnum = 1
+	p.setProgram(0)
 
 	for i := 0; i < 8; i++ {
 		i := i
@@ -103,11 +109,10 @@ func New(inp controller.Input) *Player {
 			}
 			p.press()
 			num := int(control - controller.Control(xl.ControlButtonTrackFocus[0]))
-			p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[p.pnum]), 0)
-			p.inp.SetColor(0, control, controller.Color(p.chooseProgramColor()))
 			p.setProgram(num)
 		})
 		p.withLock(controller.Control(xl.ControlButtonTrackControl[i]), func(control controller.Control, value controller.Value) {
+
 			if value == 0 {
 				// Ignore button-up
 				return
@@ -121,13 +126,7 @@ func New(inp controller.Input) *Player {
 			p.shadows[p.pnum].ButtonsToggle[i] = p.current.ButtonsToggle[i]
 			p.shadows[p.pnum].ButtonsToggleMod4[i] = p.current.ButtonsToggleMod4[i]
 
-			var cols [4]xl.Color
-			if p.current.ButtonsToggle[i] {
-				cols = xl.FourBrightColors
-			} else {
-				cols = xl.FourDimColors
-			}
-			inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), cols[p.current.ButtonsToggleMod4[i]])
+			inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.colorsFor(p.current.ButtonsToggleMod4[i]))
 		})
 	}
 	return p
@@ -150,10 +149,17 @@ func (p *Player) Draw(img *image.RGBA) {
 }
 
 func (p *Player) setProgram(num int) {
+	p.inp.SetColor(0, xl.ControlButtonTrackFocus[num], controller.Color(p.chooseProgramColor()))
 	if p.pnum == num {
 		return
 	}
+	p.current = p.shadows[num]
+	p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[p.pnum]), 0)
 	p.pnum = num
+
+	for i := 0; i < 8; i++ {
+		p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.colorsFor(p.current.ButtonsToggleMod4[i]))
+	}
 }
 
 func (p *Player) chooseProgramColor() (col xl.Color) {
@@ -168,4 +174,14 @@ func (p *Player) press() bool {
 	last := p.lastpress
 	p.lastpress = now
 	return now.Sub(last) < fastPressLimit
+}
+
+func (p *Player) colorsFor(n int) xl.Color {
+	var cols [4]xl.Color
+	if p.current.ButtonsToggle[p.pnum] {
+		cols = xl.FourBrightColors
+	} else {
+		cols = [4]xl.Color{} // xl.FourDimColors
+	}
+	return cols[n%4]
 }

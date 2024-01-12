@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fogleman/gg"
+	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	"golang.org/x/image/font"
 	"gonum.org/v1/gonum/stat/distuv"
@@ -211,6 +212,10 @@ func (o *OpenMic) set(t string) {
 	defer o.lock.Unlock()
 	o.input = t
 	o.combine = false
+}
+
+func (o *OpenMic) Inputs() []controller.Control {
+	return data.StandardControls
 }
 
 func (o *OpenMic) Draw(dat *data.Data, img *image.RGBA) {

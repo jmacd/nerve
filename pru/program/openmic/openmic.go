@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fogleman/gg"
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	"golang.org/x/image/font"
@@ -215,7 +216,7 @@ func (o *OpenMic) set(t string) {
 }
 
 func (o *OpenMic) Inputs() []controller.Control {
-	return data.StandardControls
+	return append(data.StandardControls, xl.ControlKnobSendA[4:8]...)
 }
 
 func (o *OpenMic) Draw(dat *data.Data, img *image.RGBA) {

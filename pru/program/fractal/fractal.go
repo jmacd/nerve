@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	colorful "github.com/lucasb-eyer/go-colorful"
@@ -40,7 +41,7 @@ func New() *Fractal {
 }
 
 func (f *Fractal) Inputs() []controller.Control {
-	return data.StandardControls
+	return append(data.StandardControls, append(xl.ControlKnobSendB[0:4], xl.ControlKnobSendA[0])...)
 }
 
 func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
@@ -58,7 +59,7 @@ func (f *Fractal) Draw(data *data.Data, img *image.RGBA) {
 }
 
 func vary(knob controller.Value) float64 {
-	return 1 // knob.Float() + 0.5
+	return 1 - 1e-6 + 2e-6*knob.Float()
 }
 
 func (f *Fractal) computeHues(loc locSet) {

@@ -60,7 +60,8 @@ func (e *emptyProgram) Inputs() []controller.Control {
 
 func New(inp controller.Input) *Player {
 	p := &Player{
-		inp: inp,
+		inp:    inp,
+		active: map[controller.Control]bool{},
 	}
 
 	for i := range p.programs {
@@ -126,7 +127,7 @@ func New(inp controller.Input) *Player {
 			p.shadows[p.pnum].ButtonsToggle[i] = p.current.ButtonsToggle[i]
 			p.shadows[p.pnum].ButtonsToggleMod4[i] = p.current.ButtonsToggleMod4[i]
 
-			inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.colorsFor(p.current.ButtonsToggleMod4[i]))
+			inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.buttonColorsFor(i))
 		})
 	}
 	return p
@@ -153,12 +154,24 @@ func (p *Player) setProgram(num int) {
 	if p.pnum == num {
 		return
 	}
+	for _, act := range p.programs[p.pnum].Inputs() {
+		if p.active[act] {
+			p.inp.SetColor(0, act, 0)
+		}
+	}
+
 	p.current = p.shadows[num]
 	p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[p.pnum]), 0)
 	p.pnum = num
 
 	for i := 0; i < 8; i++ {
-		p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.colorsFor(p.current.ButtonsToggleMod4[i]))
+		p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), p.buttonColorsFor(i))
+	}
+
+	p.active = map[controller.Control]bool{}
+	for _, act := range p.programs[p.pnum].Inputs() {
+		p.active[act] = true
+		p.inp.SetColor(0, act, xl.FourBrightColors[act%4])
 	}
 }
 
@@ -176,12 +189,9 @@ func (p *Player) press() bool {
 	return now.Sub(last) < fastPressLimit
 }
 
-func (p *Player) colorsFor(n int) xl.Color {
-	var cols [4]xl.Color
-	if p.current.ButtonsToggle[p.pnum] {
-		cols = xl.FourBrightColors
-	} else {
-		cols = [4]xl.Color{} // xl.FourDimColors
+func (p *Player) buttonColorsFor(n int) xl.Color {
+	if !p.current.ButtonsToggle[n] {
+		return 0
 	}
-	return cols[n%4]
+	return xl.FourBrightColors[p.current.ButtonsToggleMod4[n]]
 }

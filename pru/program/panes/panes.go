@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/fogleman/gg"
+	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/launchmidi/midi/controller"
 	"github.com/jmacd/nerve/pru/program/data"
 	"github.com/lucasb-eyer/go-colorful"
@@ -17,7 +18,7 @@ func New() *Panes {
 }
 
 func (p *Panes) Inputs() []controller.Control {
-	return data.StandardControls
+	return append(data.StandardControls, xl.ControlKnobSendA[0:3]...)
 }
 
 func (c *Panes) setColor(ggctx *gg.Context, data *data.Data, x, y, z float64) {

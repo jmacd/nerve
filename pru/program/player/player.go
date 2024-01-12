@@ -3,6 +3,7 @@ package player
 import (
 	"image"
 	"sync"
+	"time"
 
 	"github.com/jmacd/launchmidi/launchctl/xl"
 	"github.com/jmacd/launchmidi/midi/controller"
@@ -14,6 +15,8 @@ import (
 	"github.com/jmacd/nerve/pru/program/panes"
 )
 
+const fastPressLimit = 500 * time.Millisecond
+
 type Program interface {
 	Draw(*data.Data, *image.RGBA)
 }
@@ -22,9 +25,12 @@ type Player struct {
 	inp  controller.Input
 	lock sync.Mutex
 
-	programs [16]Program
-
-	data.Data
+	pnum      int
+	pvar      int
+	programs  [8]Program
+	current   data.Data
+	shadows   [8]data.Data
+	lastpress time.Time
 }
 
 func (p *Player) withLock(trigger controller.Control, callback func(control controller.Control, value controller.Value)) {
@@ -51,8 +57,10 @@ func New(inp controller.Input) *Player {
 		inp: inp,
 	}
 
+	p.current.Init()
 	for i := range p.programs {
 		p.programs[i] = newEmptyProgram()
+		p.shadows[i].Init()
 	}
 
 	p.programs[0] = openmic.New(data.WelcomeText, false)
@@ -64,56 +72,100 @@ func New(inp controller.Input) *Player {
 	p.programs[6] = circle.New()
 	p.programs[7] = openmic.New("", true)
 
-	p.Data.Init()
-
 	inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[0]), controller.Color(xl.ColorBrightRed))
 
 	for i := 0; i < 8; i++ {
 		i := i
 		p.withLock(controller.Control(xl.ControlKnobSendA[i]), func(control controller.Control, value controller.Value) {
-			p.Data.KnobsRow1[i] = value
+			p.press()
+			p.current.KnobsRow1[i] = value
+			p.shadows[p.pnum].KnobsRow1[i] = value
 		})
 		p.withLock(controller.Control(xl.ControlKnobSendB[i]), func(control controller.Control, value controller.Value) {
-			p.Data.KnobsRow2[i] = value
+			p.press()
+			p.current.KnobsRow2[i] = value
+			p.shadows[p.pnum].KnobsRow2[i] = value
 		})
 		p.withLock(controller.Control(xl.ControlKnobPanDevice[i]), func(control controller.Control, value controller.Value) {
-			p.Data.KnobsRow3[i] = value
+			p.press()
+			p.current.KnobsRow3[i] = value
+			p.shadows[p.pnum].KnobsRow3[i] = value
 		})
 		p.withLock(controller.Control(xl.ControlSlider[i]), func(control controller.Control, value controller.Value) {
-			p.Data.Sliders[i] = value
+			p.press()
+			p.current.Sliders[i] = value
+			p.shadows[p.pnum].Sliders[i] = value
 		})
 		p.withLock(controller.Control(xl.ControlButtonTrackFocus[i]), func(control controller.Control, value controller.Value) {
 			if value == 0 {
+				// Ignore button-up
 				return
 			}
-			if p.Data.ButtonsRadio == i {
-				return
-			}
-			inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[p.Data.ButtonsRadio]), 0)
-			inp.SetColor(0, control, controller.Color(xl.ColorBrightRed))
-			p.Data.ButtonsRadio = int(control - controller.Control(xl.ControlButtonTrackFocus[0]))
+			p.press()
+			num := int(control - controller.Control(xl.ControlButtonTrackFocus[0]))
+			p.inp.SetColor(0, controller.Control(xl.ControlButtonTrackFocus[p.pnum]), 0)
+			p.inp.SetColor(0, control, controller.Color(p.chooseProgramColor()))
+			p.setProgram(num)
 		})
 		p.withLock(controller.Control(xl.ControlButtonTrackControl[i]), func(control controller.Control, value controller.Value) {
 			if value == 0 {
+				// Ignore button-up
 				return
 			}
-			if p.Data.ButtonsToggle[i] {
-				p.Data.ButtonsToggle[i] = false
-				inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), 0)
-			} else {
-				p.Data.ButtonsToggle[i] = true
-				inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), controller.Color(xl.ColorBrightYellow))
+			if !p.press() {
+				p.current.ButtonsToggle[i] = !p.current.ButtonsToggle[i]
 			}
+			p.current.ButtonsToggleMod4[i]++
+			p.current.ButtonsToggleMod4[i] %= 4
+
+			p.shadows[p.pnum].ButtonsToggle[i] = p.current.ButtonsToggle[i]
+			p.shadows[p.pnum].ButtonsToggleMod4[i] = p.current.ButtonsToggleMod4[i]
+
+			var cols [4]xl.Color
+			if p.current.ButtonsToggle[i] {
+				cols = xl.FourBrightColors
+			} else {
+				cols = xl.FourDimColors
+			}
+			inp.SetColor(0, controller.Control(xl.ControlButtonTrackControl[i]), cols[p.current.ButtonsToggleMod4[i]])
 		})
 	}
-
 	return p
+}
+
+// Data returns current data
+func (p *Player) Data() data.Data {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	return p.shadows[p.pnum]
 }
 
 func (p *Player) Draw(img *image.RGBA) {
 	p.lock.Lock()
-	data := p.Data
+	dat := p.shadows[p.pnum]
+	num := p.pnum
 	p.lock.Unlock()
 
-	p.programs[data.ButtonsRadio].Draw(&data, img)
+	p.programs[num].Draw(&dat, img)
+}
+
+func (p *Player) setProgram(num int) {
+	if p.pnum == num {
+		return
+	}
+	p.pnum = num
+}
+
+func (p *Player) chooseProgramColor() (col xl.Color) {
+	col = xl.FourBrightColors[p.pvar%4]
+	p.pvar++
+	return
+}
+
+// press returns true if the press was fast
+func (p *Player) press() bool {
+	now := time.Now()
+	last := p.lastpress
+	p.lastpress = now
+	return now.Sub(last) < fastPressLimit
 }

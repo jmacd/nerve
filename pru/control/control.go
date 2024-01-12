@@ -121,7 +121,7 @@ func Main() error {
 
 				bank := state.waitReady()
 
-				buf.Copy0(1+2*player.Data.KnobsRow3[7].Float(), &state.frames[bank])
+				buf.Copy0(1+2*player.Data().KnobsRow3[7].Float(), &state.frames[bank])
 
 				state.finish(bank)
 			}

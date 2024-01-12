@@ -12,16 +12,19 @@ import (
 var rnd = rand.New(rand.NewSource(1333))
 
 func randValue() controller.Value {
-	return controller.Value(rnd.Intn(256))
+	return controller.Value(14 + rnd.Intn(100))
 }
 
 type Data struct {
-	Sliders       [8]controller.Value
-	KnobsRow1     [8]controller.Value
-	KnobsRow2     [8]controller.Value
-	KnobsRow3     [8]controller.Value
-	ButtonsRadio  int // 0-7
-	ButtonsToggle [8]bool
+	Sliders           [8]controller.Value
+	KnobsRow1         [8]controller.Value
+	KnobsRow2         [8]controller.Value
+	KnobsRow3         [8]controller.Value
+	ButtonsToggle     [8]bool
+	ButtonsToggleMod4 [8]int // 0-3
+
+	// Program number is internal to player.go
+	// ButtonsRadio      int // 0-7
 }
 
 func (d *Data) Init() {
@@ -30,6 +33,8 @@ func (d *Data) Init() {
 		d.KnobsRow1[i] = randValue()
 		d.KnobsRow2[i] = randValue()
 		d.KnobsRow3[i] = randValue()
+		d.ButtonsToggle[i] = rnd.Intn(2) == 0
+		d.ButtonsToggleMod4[i] = rnd.Intn(4)
 	}
 }
 
